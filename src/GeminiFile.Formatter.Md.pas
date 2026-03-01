@@ -20,7 +20,12 @@ type
 	///   Formats a Gemini conversation as Markdown.
 	/// </summary>
 	TGeminiMarkdownFormatter = class
+	private
+		FHideEmptyBlocks: Boolean;
 	public
+		constructor Create;
+		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
+		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 Markdown.
 		/// </summary>
@@ -58,6 +63,12 @@ begin
 end;
 
 { TGeminiMarkdownFormatter }
+
+constructor TGeminiMarkdownFormatter.Create;
+begin
+	inherited Create;
+	FHideEmptyBlocks := True;
+end;
 
 procedure TGeminiMarkdownFormatter.FormatToStream(
 	AOutput: TStream;
@@ -160,7 +171,7 @@ begin
 			LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
 
 			// Skip empty display blocks (no text, no embedded resource)
-			if (LText = '') and (not LHasResource) then
+			if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
 			begin
 				if LChunk.DriveImageId <> '' then
 					Inc(LPendingRemoteCount);

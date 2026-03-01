@@ -24,12 +24,15 @@ type
 	TGeminiHtmlFormatter = class
 	private
 		FEmbedResources: Boolean;
+		FHideEmptyBlocks: Boolean;
 		FCustomCSS: string;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
 		/// <param name="AEmbedResources">True to embed base64 images, False for external links.</param>
 		/// <param name="ACustomCSS">Optional CSS appended after built-in styles for user overrides.</param>
 		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = '');
+		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
+		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
 
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 HTML.
@@ -114,6 +117,7 @@ constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean; const ACustomC
 begin
 	inherited Create;
 	FEmbedResources := AEmbedResources;
+	FHideEmptyBlocks := True;
 	FCustomCSS := ACustomCSS;
 end;
 
@@ -224,7 +228,7 @@ begin
 			LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
 
 			// Skip empty display blocks (no text, no embedded resource)
-			if (LText = '') and (not LHasResource) then
+			if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
 			begin
 				if LChunk.DriveImageId <> '' then
 					Inc(LPendingRemoteCount);

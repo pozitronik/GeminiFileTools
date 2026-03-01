@@ -102,6 +102,9 @@ type
 
 	TPluginConfig = record
 		UseOriginalName: Boolean;
+		HideEmptyBlocksText: Boolean;
+		HideEmptyBlocksMd: Boolean;
+		HideEmptyBlocksHtml: Boolean;
 	end;
 
 /// <summary>
@@ -186,7 +189,11 @@ begin
 	if not GPluginConfigLoaded then
 	begin
 		GPluginConfigLoaded := True;
+		// Defaults (record Default zeroes booleans, so set True defaults explicitly)
 		GPluginConfig := Default(TPluginConfig);
+		GPluginConfig.HideEmptyBlocksText := True;
+		GPluginConfig.HideEmptyBlocksMd := True;
+		GPluginConfig.HideEmptyBlocksHtml := True;
 		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
 		begin
 			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
@@ -196,6 +203,12 @@ begin
 				try
 					GPluginConfig.UseOriginalName :=
 						LIni.ReadBool('General', 'UseOriginalName', False);
+					GPluginConfig.HideEmptyBlocksText :=
+						LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
+					GPluginConfig.HideEmptyBlocksMd :=
+						LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', True);
+					GPluginConfig.HideEmptyBlocksHtml :=
+						LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', True);
 				finally
 					LIni.Free;
 				end;
@@ -287,12 +300,16 @@ var
 	LFormatter: TGeminiTextFormatter;
 	LMdFormatter: TGeminiMarkdownFormatter;
 	LHtmlFormatter: TGeminiHtmlFormatter;
+	LConfig: TPluginConfig;
 begin
+	LConfig := GetPluginConfig;
+
 	// Plain text
 	LStream := TMemoryStream.Create;
 	try
 		LFormatter := TGeminiTextFormatter.Create;
 		try
+			LFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksText;
 			LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -313,6 +330,7 @@ begin
 	try
 		LMdFormatter := TGeminiMarkdownFormatter.Create;
 		try
+			LMdFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksMd;
 			LMdFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -333,6 +351,7 @@ begin
 	try
 		LHtmlFormatter := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
 		try
+			LHtmlFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
 			LHtmlFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -523,6 +542,7 @@ begin
 			try
 				LFormatter := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
 				try
+					LFormatter.HideEmptyBlocks := GetPluginConfig.HideEmptyBlocksHtml;
 					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
 						FResourceInfos);
