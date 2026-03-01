@@ -30,6 +30,32 @@ type
     procedure MimeToExtension_CaseInsensitive;
     [Test]
     procedure MimeToExtension_Empty_ReturnsBin;
+    [Test]
+    procedure MimeToExtension_Bmp_ReturnsBmp;
+    [Test]
+    procedure MimeToExtension_Svg_ReturnsSvg;
+    [Test]
+    procedure MimeToExtension_Tiff_ReturnsTiff;
+    [Test]
+    procedure MimeToExtension_Mp3_ReturnsMp3;
+    [Test]
+    procedure MimeToExtension_Wav_ReturnsWav;
+    [Test]
+    procedure MimeToExtension_Ogg_ReturnsOgg;
+    [Test]
+    procedure MimeToExtension_Mp4_ReturnsMp4;
+    [Test]
+    procedure MimeToExtension_Webm_ReturnsWebm;
+    [Test]
+    procedure MimeToExtension_Json_ReturnsJson;
+    [Test]
+    procedure MimeToExtension_Html_ReturnsHtml;
+    [Test]
+    procedure MimeToExtension_Csv_ReturnsCsv;
+
+    // FormatCreateTime tests
+    [Test]
+    procedure FormatCreateTime_Zero_ReturnsEmpty;
 
     // FormatByteSize tests
     [Test]
@@ -88,6 +114,66 @@ end;
 procedure TTestGeminiFileTypes.MimeToExtension_Empty_ReturnsBin;
 begin
   Assert.AreEqual('.bin', MimeToExtension(''));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Bmp_ReturnsBmp;
+begin
+  Assert.AreEqual('.bmp', MimeToExtension('image/bmp'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Svg_ReturnsSvg;
+begin
+  Assert.AreEqual('.svg', MimeToExtension('image/svg+xml'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Tiff_ReturnsTiff;
+begin
+  Assert.AreEqual('.tiff', MimeToExtension('image/tiff'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Mp3_ReturnsMp3;
+begin
+  Assert.AreEqual('.mp3', MimeToExtension('audio/mpeg'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Wav_ReturnsWav;
+begin
+  Assert.AreEqual('.wav', MimeToExtension('audio/wav'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Ogg_ReturnsOgg;
+begin
+  Assert.AreEqual('.ogg', MimeToExtension('audio/ogg'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Mp4_ReturnsMp4;
+begin
+  Assert.AreEqual('.mp4', MimeToExtension('video/mp4'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Webm_ReturnsWebm;
+begin
+  Assert.AreEqual('.webm', MimeToExtension('video/webm'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Json_ReturnsJson;
+begin
+  Assert.AreEqual('.json', MimeToExtension('application/json'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Html_ReturnsHtml;
+begin
+  Assert.AreEqual('.html', MimeToExtension('text/html'));
+end;
+
+procedure TTestGeminiFileTypes.MimeToExtension_Csv_ReturnsCsv;
+begin
+  Assert.AreEqual('.csv', MimeToExtension('text/csv'));
+end;
+
+procedure TTestGeminiFileTypes.FormatCreateTime_Zero_ReturnsEmpty;
+begin
+  Assert.AreEqual('', FormatCreateTime(0));
 end;
 
 procedure TTestGeminiFileTypes.FormatByteSize_Bytes;

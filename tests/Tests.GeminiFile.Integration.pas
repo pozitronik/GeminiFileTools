@@ -57,6 +57,8 @@ type
     procedure LoadFromFile_NotFound_RaisesException;
     [Test]
     procedure Create_WithCustomParserAndExtractor;
+    [Test]
+    procedure GetResources_PartsInlineDataFallback;
   end;
 
 implementation
@@ -312,6 +314,34 @@ begin
       LStream.Free;
     end;
     Assert.AreEqual<Integer>(0, LFile.ChunkCount);
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.GetResources_PartsInlineDataFallback;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+  LResources: TArray<TGeminiResource>;
+begin
+  // Chunk with InlineData in parts but no chunk-level InlineImage
+  // Exercises the fallback path in TGeminiFile.GetResources
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[{"text":"","role":"user","parts":[' +
+      '{"text":"test","inlineData":{"mimeType":"image/png","data":"AAAA"}}' +
+      ']}]}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    LResources := LFile.GetResources;
+    Assert.AreEqual<Integer>(1, Length(LResources),
+      'Should find 1 resource from parts inlineData fallback');
+    Assert.AreEqual('image/png', LResources[0].MimeType);
   finally
     LFile.Free;
   end;

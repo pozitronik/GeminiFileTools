@@ -47,6 +47,12 @@ type
 		procedure UnmatchedMarker_LiteralText;
 		[Test]
 		procedure MixedFormatting_AllApplied;
+		[Test]
+		procedure ClosingMarkerWithSpaceBefore_NotApplied;
+		[Test]
+		procedure UnclosedCodeBlock_TreatedAsProse;
+		[Test]
+		procedure EmptyDelimiter_ReturnsSingleElement;
 	end;
 
 implementation
@@ -191,6 +197,39 @@ begin
 	Assert.Contains(LResult, '<em>italic</em>');
 	Assert.Contains(LResult, '<code>code</code>');
 	Assert.Contains(LResult, '<del>strike</del>');
+end;
+
+procedure TTestMarkdownToHtml.ClosingMarkerWithSpaceBefore_NotApplied;
+var
+	LResult: string;
+begin
+	// Closing ** preceded by space violates the flanking rule
+	LResult := MarkdownToHtml('**word ** still here');
+	Assert.IsFalse(LResult.Contains('<strong>'),
+		'Closing marker preceded by space should not be applied');
+end;
+
+procedure TTestMarkdownToHtml.UnclosedCodeBlock_TreatedAsProse;
+var
+	LResult: string;
+begin
+	// A ``` opener without a closer should be treated as regular prose
+	LResult := MarkdownToHtml('before' + #10 + '```python' + #10 + 'code line');
+	Assert.IsFalse(LResult.Contains('<pre>'),
+		'Unclosed code block should not produce <pre> tag');
+	// The fallback path concatenates the fence and content into prose
+	Assert.Contains(LResult, 'code line');
+	Assert.Contains(LResult, 'before');
+end;
+
+procedure TTestMarkdownToHtml.EmptyDelimiter_ReturnsSingleElement;
+var
+	LResult: string;
+begin
+	// Empty string input should still produce output (via ProcessProse short-circuit)
+	LResult := MarkdownToHtml('   ');
+	// Whitespace-only input produces an empty paragraph that gets skipped
+	Assert.AreEqual('', LResult);
 end;
 
 initialization

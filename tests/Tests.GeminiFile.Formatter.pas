@@ -71,6 +71,12 @@ type
 		procedure CombinedBlocks_FirstTimestamp;
 		[Test]
 		procedure CombinedBlocks_ResourceInlinePosition;
+		[Test]
+		procedure CombinedThinkingBlocks_SeparatorBetween;
+		[Test]
+		procedure PartLevelThinking_RenderedInModelBlock;
+		[Test]
+		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
 	end;
 
 	[TestFixture]
@@ -117,6 +123,14 @@ type
 		procedure CombinedBlocks_HrSeparator;
 		[Test]
 		procedure CombinedBlocks_TokensShown;
+		[Test]
+		procedure CombinedThinkingBlocks_SeparatorBetween;
+		[Test]
+		procedure PartLevelThinking_RenderedInModelBlock;
+		[Test]
+		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
+		[Test]
+		procedure ThinkingWithTimestampAndResource_CombinedSummary;
 	end;
 
 	[TestFixture]
@@ -181,6 +195,20 @@ type
 		procedure CombinedBlocks_CombinedPartCss;
 		[Test]
 		procedure CombinedThinkingBlocks_SingleDetails;
+		[Test]
+		procedure PartLevelThinking_RenderedInModelBlock;
+		[Test]
+		procedure PartLevelThinking_ExpandThinkingOpen;
+		[Test]
+		procedure PartLevelThinking_NoMarkdown_Escaped;
+		[Test]
+		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
+		[Test]
+		procedure ThinkingWithTimestampAndResource_CombinedSummary;
+		[Test]
+		procedure ThinkingEmbedded_ResourceUsesDataUri;
+		[Test]
+		procedure ThinkingBlock_RenderMarkdownFalse_Escaped;
 	end;
 
 implementation
@@ -480,6 +508,64 @@ begin
 	Assert.IsTrue(LResPos < LSepPos, 'Resource should appear before separator');
 end;
 
+procedure TTestGeminiTextFormatter.CombinedThinkingBlocks_SeparatorBetween;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grModel, 'Think A', 0, True));
+	FChunks.Add(MakeChunk(grModel, 'Think B', 0, True));
+	LResult := FormatToString('', nil);
+	// Should have separator between combined thinking sub-blocks
+	Assert.Contains(LResult, '- - -');
+	Assert.Contains(LResult, 'Think A');
+	Assert.Contains(LResult, 'Think B');
+end;
+
+procedure TTestGeminiTextFormatter.PartLevelThinking_RenderedInModelBlock;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	// Model chunk (not IsThought) with mixed parts: one thinking, one text
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.IsThought := False;
+	LChunk.Index := 0;
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Internal reasoning';
+	LPart.IsThought := True;
+	LChunk.Parts.Add(LPart);
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Visible answer';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '[MODEL]');
+	Assert.Contains(LResult, '<Thinking>');
+	Assert.Contains(LResult, 'Internal reasoning');
+	Assert.Contains(LResult, '</Thinking>');
+	Assert.Contains(LResult, 'Visible answer');
+end;
+
+procedure TTestGeminiTextFormatter.EmptyBlockWithDriveId_SkippedViaHideBlocks;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	// Empty chunk with DriveImageId but no text -- should increment pending count
+	// and Continue, followed by a model response to reset pending count
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'drive_id_1';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grModel, 'Response'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '1 remote attachment(s)');
+	Assert.Contains(LResult, 'Response');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -710,6 +796,84 @@ begin
 	FChunks.Add(MakeChunk(grModel, 'B', 25));
 	LResult := FormatToString('', nil);
 	Assert.Contains(LResult, '*(40 tokens)*');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CombinedThinkingBlocks_SeparatorBetween;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grModel, 'Think A', 0, True));
+	FChunks.Add(MakeChunk(grModel, 'Think B', 0, True));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, 'Think A');
+	Assert.Contains(LResult, 'Think B');
+	// Only one <details> block for combined thinking
+	var LPos := Pos('<details>', LResult);
+	Assert.IsTrue(LPos > 0, 'Should have a details element');
+	var LSecond := Pos('<details>', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one details element');
+end;
+
+procedure TTestGeminiMarkdownFormatter.PartLevelThinking_RenderedInModelBlock;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.IsThought := False;
+	LChunk.Index := 0;
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Internal reasoning';
+	LPart.IsThought := True;
+	LChunk.Parts.Add(LPart);
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Visible answer';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '### Model');
+	Assert.Contains(LResult, '<details><summary>Thinking</summary>');
+	Assert.Contains(LResult, 'Internal reasoning');
+	Assert.Contains(LResult, '</details>');
+	Assert.Contains(LResult, 'Visible answer');
+end;
+
+procedure TTestGeminiMarkdownFormatter.EmptyBlockWithDriveId_SkippedViaHideBlocks;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'drive_id_1';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grModel, 'Response'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '*1 remote attachment(s)*');
+	Assert.Contains(LResult, 'Response');
+end;
+
+procedure TTestGeminiMarkdownFormatter.ThinkingWithTimestampAndResource_CombinedSummary;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	LChunk := MakeChunk(grModel, 'Reasoning about image...', 0, True);
+	LChunk.CreateTime := EncodeDate(2026, 3, 1) + EncodeTime(12, 0, 0, 0);
+	FChunks.Add(LChunk);
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.png';
+	LRes[0].MimeType := 'image/png';
+	LRes[0].DecodedSize := 51200;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString('', LRes);
+	// Summary should contain both timestamp and "with attachment"
+	Assert.Contains(LResult, '2026-03-01 12:00:00');
+	Assert.Contains(LResult, 'with attachment');
 end;
 
 // ========================================================================
@@ -1188,6 +1352,231 @@ begin
 	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one thinking details element');
 	Assert.Contains(LResult, 'Think A');
 	Assert.Contains(LResult, 'Think B');
+end;
+
+procedure TTestGeminiHtmlFormatter.PartLevelThinking_RenderedInModelBlock;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.IsThought := False;
+	LChunk.Index := 0;
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Internal reasoning';
+	LPart.IsThought := True;
+	LChunk.Parts.Add(LPart);
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Visible answer';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.RenderMarkdown := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, 'class="message model"');
+	Assert.Contains(LResult, '<details class="thinking">');
+	Assert.Contains(LResult, '<summary>Thinking</summary>');
+	Assert.Contains(LResult, 'Internal reasoning');
+	Assert.Contains(LResult, '</details>');
+	Assert.Contains(LResult, 'Visible answer');
+end;
+
+procedure TTestGeminiHtmlFormatter.PartLevelThinking_ExpandThinkingOpen;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.IsThought := False;
+	LChunk.Index := 0;
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Thinking part';
+	LPart.IsThought := True;
+	LChunk.Parts.Add(LPart);
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Answer';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.DefaultExpandThinking := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<details class="thinking" open>');
+end;
+
+procedure TTestGeminiHtmlFormatter.PartLevelThinking_NoMarkdown_Escaped;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.IsThought := False;
+	LChunk.Index := 0;
+	LPart := TGeminiPart.Create;
+	LPart.Text := '**bold thinking**';
+	LPart.IsThought := True;
+	LChunk.Parts.Add(LPart);
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Answer';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.RenderMarkdown := False;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '**bold thinking**');
+	Assert.IsFalse(LResult.Contains('<strong>bold thinking</strong>'),
+		'Markdown should not be rendered in thinking when disabled');
+end;
+
+procedure TTestGeminiHtmlFormatter.EmptyBlockWithDriveId_SkippedViaHideBlocks;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'drive_id_1';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grModel, 'Response'));
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, '1 remote attachment(s)');
+	Assert.Contains(LResult, 'Response');
+end;
+
+procedure TTestGeminiHtmlFormatter.ThinkingWithTimestampAndResource_CombinedSummary;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	LChunk := MakeChunk(grModel, 'Reasoning about image...', 0, True);
+	LChunk.CreateTime := EncodeDate(2026, 3, 1) + EncodeTime(12, 0, 0, 0);
+	FChunks.Add(LChunk);
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.png';
+	LRes[0].MimeType := 'image/png';
+	LRes[0].DecodedSize := 51200;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString(False, '', LRes);
+	Assert.Contains(LResult, '2026-03-01 12:00:00');
+	Assert.Contains(LResult, 'with attachment');
+end;
+
+procedure TTestGeminiHtmlFormatter.ThinkingEmbedded_ResourceUsesDataUri;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Analyzing image...', 0, True));
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.png';
+	LRes[0].MimeType := 'image/png';
+	LRes[0].Base64Data := 'AQIDBA==';
+	LRes[0].DecodedSize := 4;
+	LRes[0].ChunkIndex := 0;
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(True);
+		try
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, LRes);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, 'src="data:image/png;base64,AQIDBA=="');
+end;
+
+procedure TTestGeminiHtmlFormatter.ThinkingBlock_RenderMarkdownFalse_Escaped;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, '**bold thinking**', 0, True));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.RenderMarkdown := False;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '**bold thinking**');
+	Assert.IsFalse(LResult.Contains('<strong>'),
+		'Markdown should not be rendered in thinking block when disabled');
 end;
 
 initialization
