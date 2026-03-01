@@ -78,9 +78,15 @@ type
 
     // Error handling tests
     [Test]
-    procedure Parse_MalformedJson_RaisesError;
+    procedure Parse_BinaryContent_RaisesError;
     [Test]
-    procedure Parse_NonObjectRoot_RaisesError;
+    procedure Parse_NonJsonText_RaisesError;
+    [Test]
+    procedure Parse_BrokenJsonObject_RaisesError;
+    [Test]
+    procedure Parse_WithBOM_ParsesCorrectly;
+    [Test]
+    procedure Parse_WithLeadingWhitespace_ParsesCorrectly;
 
     // JSON helper tests
     [Test]
@@ -312,8 +318,31 @@ begin
     'Invalid createTime should result in 0');
 end;
 
-procedure TTestGeminiFileParser.Parse_MalformedJson_RaisesError;
+procedure TTestGeminiFileParser.Parse_BinaryContent_RaisesError;
 begin
+  Assert.WillRaise(
+    procedure
+    var
+      LStream: TMemoryStream;
+      LBytes: TBytes;
+    begin
+      // PK magic bytes (ZIP header)
+      LBytes := TBytes.Create($50, $4B, $03, $04, $00, $00, $00, $00);
+      LStream := TMemoryStream.Create;
+      try
+        LStream.WriteBuffer(LBytes[0], Length(LBytes));
+        LStream.Position := 0;
+        FParser.Parse(LStream, FRunSettings, FChunks);
+      finally
+        LStream.Free;
+      end;
+    end,
+    EGeminiParseError, '');
+end;
+
+procedure TTestGeminiFileParser.Parse_NonJsonText_RaisesError;
+begin
+  // Doesn't start with '{' -- caught by binary check
   Assert.WillRaise(
     procedure
     begin
@@ -322,14 +351,43 @@ begin
     EGeminiParseError, '');
 end;
 
-procedure TTestGeminiFileParser.Parse_NonObjectRoot_RaisesError;
+procedure TTestGeminiFileParser.Parse_BrokenJsonObject_RaisesError;
 begin
+  // Starts with '{' but is not valid JSON -- caught by ParseJSONValue
   Assert.WillRaise(
     procedure
     begin
-      ParseJson('[1, 2, 3]');
+      ParseJson('{broken json content');
     end,
     EGeminiParseError, '');
+end;
+
+procedure TTestGeminiFileParser.Parse_WithBOM_ParsesCorrectly;
+var
+  LStream: TMemoryStream;
+  LBOM: TBytes;
+  LJson: TBytes;
+begin
+  // UTF-8 BOM + valid JSON
+  LBOM := TBytes.Create($EF, $BB, $BF);
+  LJson := TEncoding.UTF8.GetBytes('{"chunkedPrompt":{"chunks":[]}}');
+  LStream := TMemoryStream.Create;
+  try
+    LStream.WriteBuffer(LBOM[0], Length(LBOM));
+    LStream.WriteBuffer(LJson[0], Length(LJson));
+    LStream.Position := 0;
+    FParser.Parse(LStream, FRunSettings, FChunks);
+    Assert.AreEqual<Integer>(0, FChunks.Count);
+  finally
+    LStream.Free;
+  end;
+end;
+
+procedure TTestGeminiFileParser.Parse_WithLeadingWhitespace_ParsesCorrectly;
+begin
+  // Leading whitespace before the JSON object
+  ParseJson('   '#13#10'  {"chunkedPrompt":{"chunks":[]}}');
+  Assert.AreEqual<Integer>(0, FChunks.Count);
 end;
 
 procedure TTestGeminiFileParser.JsonHelpers_NullHandling;

@@ -177,13 +177,27 @@ var
   LObj: TJSONObject;
   LChunkedPrompt: TJSONObject;
   LChunksArr: TJSONArray;
+  LStart: Integer;
 begin
   Result := '';
 
-  // Read entire stream into a string
+  // Read entire stream into a byte array
   SetLength(LBytes, AStream.Size - AStream.Position);
   if Length(LBytes) > 0 then
     AStream.ReadBuffer(LBytes[0], Length(LBytes));
+
+  // Quick sanity check: first non-whitespace byte must be '{' for valid JSON object.
+  // This catches binary files (ZIP, MP4, images, etc.) before expensive UTF-8 decoding.
+  LStart := 0;
+  // Skip UTF-8 BOM if present
+  if (Length(LBytes) >= 3) and (LBytes[0] = $EF) and (LBytes[1] = $BB) and (LBytes[2] = $BF) then
+    LStart := 3;
+  // Skip leading ASCII whitespace
+  while (LStart < Length(LBytes)) and (LBytes[LStart] in [$09, $0A, $0D, $20]) do
+    Inc(LStart);
+  if (LStart >= Length(LBytes)) or (LBytes[LStart] <> Ord('{')) then
+    raise EGeminiParseError.Create('Not a valid Gemini file: content does not start with a JSON object');
+
   LJsonStr := TEncoding.UTF8.GetString(LBytes);
   SetLength(LBytes, 0); // free bytes early
 
@@ -195,8 +209,6 @@ begin
       raise EGeminiParseError.Create('Failed to parse JSON: ' + E.Message);
   end;
   try
-    if not (LRoot is TJSONObject) then
-      raise EGeminiParseError.Create('Invalid Gemini file: root is not a JSON object');
     LObj := TJSONObject(LRoot);
 
     // Clear previous data

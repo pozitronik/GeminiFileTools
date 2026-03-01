@@ -104,9 +104,9 @@ begin
     WriteLn('=== Model Settings ===');
     WriteLn('Model:             ', LFile.RunSettings.Model);
     if not IsNaN(LFile.RunSettings.Temperature) then
-      WriteLn('Temperature:       ', FormatFloat('0.0#', LFile.RunSettings.Temperature));
+      WriteLn('Temperature:       ', FormatFloat('0.0#', LFile.RunSettings.Temperature, TFormatSettings.Invariant));
     if not IsNaN(LFile.RunSettings.TopP) then
-      WriteLn('TopP:              ', FormatFloat('0.0#', LFile.RunSettings.TopP));
+      WriteLn('TopP:              ', FormatFloat('0.0#', LFile.RunSettings.TopP, TFormatSettings.Invariant));
     if LFile.RunSettings.TopK >= 0 then
       WriteLn('TopK:              ', LFile.RunSettings.TopK);
     if LFile.RunSettings.MaxOutputTokens >= 0 then
