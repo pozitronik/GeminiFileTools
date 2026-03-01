@@ -24,10 +24,12 @@ type
 	TGeminiHtmlFormatter = class
 	private
 		FEmbedResources: Boolean;
+		FCustomCSS: string;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
 		/// <param name="AEmbedResources">True to embed base64 images, False for external links.</param>
-		constructor Create(AEmbedResources: Boolean = False);
+		/// <param name="ACustomCSS">Optional CSS appended after built-in styles for user overrides.</param>
+		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = '');
 
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 HTML.
@@ -100,10 +102,11 @@ const
 
 { TGeminiHtmlFormatter }
 
-constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean);
+constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean; const ACustomCSS: string);
 begin
 	inherited Create;
 	FEmbedResources := AEmbedResources;
+	FCustomCSS := ACustomCSS;
 end;
 
 procedure TGeminiHtmlFormatter.FormatToStream(
@@ -130,6 +133,8 @@ begin
 	StreamWriteLn(AOutput, '<title>Gemini Conversation</title>');
 	StreamWriteLn(AOutput, '<style>');
 	StreamWriteLn(AOutput, CSS_STYLES);
+	if FCustomCSS <> '' then
+		StreamWriteLn(AOutput, FCustomCSS);
 	StreamWriteLn(AOutput, '</style>');
 	StreamWriteLn(AOutput, '</head>');
 	StreamWriteLn(AOutput, '<body>');

@@ -131,6 +131,8 @@ type
 		procedure ThinkingChunkWithResource_RendersImage;
 		[Test]
 		procedure CreateTime_DisplayedInRoleDiv;
+		[Test]
+		procedure CustomCSS_EmbeddedInStyleBlock;
 	end;
 
 implementation
@@ -661,6 +663,34 @@ begin
 	LResult := FormatToString(False, '', nil);
 	Assert.Contains(LResult, 'class="time"');
 	Assert.Contains(LResult, '2026-02-26 00:01:02');
+end;
+
+procedure TTestGeminiHtmlFormatter.CustomCSS_EmbeddedInStyleBlock;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False, '.custom-rule { color: red; }');
+		try
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	// Custom CSS must appear within the style block, after built-in styles
+	Assert.Contains(LResult, '<style>');
+	Assert.Contains(LResult, '.custom-rule { color: red; }');
+	Assert.Contains(LResult, '</style>');
 end;
 
 initialization

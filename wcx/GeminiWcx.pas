@@ -127,6 +127,32 @@ implementation
 var
 	/// Tracks live archive handles for validation
 	GArchives: TList<TGeminiArchive>;
+	/// Cached custom CSS from gemini.css next to the DLL
+	GCustomCSS: string;
+	GCustomCSSLoaded: Boolean;
+
+/// <summary>
+///   Returns custom CSS content from gemini.css located next to the plugin DLL.
+///   Caches the result on first call; returns empty string if file not found.
+/// </summary>
+function GetCustomCSS: string;
+var
+	LDllPath: array[0..MAX_PATH] of Char;
+	LCssPath: string;
+begin
+	if not GCustomCSSLoaded then
+	begin
+		GCustomCSSLoaded := True;
+		GCustomCSS := '';
+		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
+		begin
+			LCssPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.css');
+			if TFile.Exists(LCssPath) then
+				GCustomCSS := TFile.ReadAllText(LCssPath, TEncoding.UTF8);
+		end;
+	end;
+	Result := GCustomCSS;
+end;
 
 function IsValidHandle(hArcData: THandle): Boolean;
 begin
@@ -245,7 +271,7 @@ begin
 	// HTML (external resources)
 	LStream := TMemoryStream.Create;
 	try
-		LHtmlFormatter := TGeminiHtmlFormatter.Create(False);
+		LHtmlFormatter := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
 		try
 			LHtmlFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
@@ -435,7 +461,7 @@ begin
 			// Generate on-demand (can be large)
 			LStream := TMemoryStream.Create;
 			try
-				LFormatter := TGeminiHtmlFormatter.Create(True);
+				LFormatter := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
 				try
 					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
