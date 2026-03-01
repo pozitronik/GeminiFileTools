@@ -50,6 +50,12 @@ type
 		procedure Scan_RealFileWithResources_StrippedCorrectly;
 		[Test]
 		procedure Scan_RealFileWithoutResources_IdenticalOutput;
+		[Test]
+		procedure Scan_ThresholdBoundary_ExactlyAtThreshold;
+		[Test]
+		procedure Scan_MultiByteUtf8InDataValue_HandledCorrectly;
+		[Test]
+		procedure Scan_UnterminatedString_DoesNotCrash;
 	end;
 
 	// =====================================================================
@@ -140,6 +146,12 @@ begin
 	Result := StringOfChar('A', ALength);
 end;
 
+/// <summary>Converts pre-scan result bytes to string for test assertions.</summary>
+function StrippedJsonStr(const AResult: TPreScanResult): string;
+begin
+	Result := TEncoding.UTF8.GetString(AResult.StrippedJsonBytes);
+end;
+
 // =========================================================================
 // TTestPreScanner
 // =========================================================================
@@ -153,7 +165,7 @@ begin
 	LJson := '{"name":"test","value":"hello"}';
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
-	Assert.AreEqual(LJson, LResult.StrippedJson);
+	Assert.AreEqual(LJson, StrippedJsonStr(LResult));
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations));
 end;
 
@@ -166,7 +178,7 @@ begin
 	LJson := '{"mimeType":"image/png","data":"AAAA"}';
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
-	Assert.AreEqual(LJson, LResult.StrippedJson);
+	Assert.AreEqual(LJson, StrippedJsonStr(LResult));
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations));
 end;
 
@@ -182,9 +194,9 @@ begin
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
 	Assert.AreEqual<Integer>(1, Length(LResult.Locations), 'Should have 1 location');
-	Assert.IsTrue(LResult.StrippedJson.Contains('__LAZY:0'),
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('__LAZY:0'),
 		'Stripped JSON should contain placeholder');
-	Assert.IsFalse(LResult.StrippedJson.Contains(LLargeData),
+	Assert.IsFalse(StrippedJsonStr(LResult).Contains(LLargeData),
 		'Stripped JSON should not contain original data');
 end;
 
@@ -202,8 +214,8 @@ begin
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
 	Assert.AreEqual<Integer>(2, Length(LResult.Locations), 'Should have 2 locations');
-	Assert.IsTrue(LResult.StrippedJson.Contains('__LAZY:0'), 'Should have __LAZY:0');
-	Assert.IsTrue(LResult.StrippedJson.Contains('__LAZY:1'), 'Should have __LAZY:1');
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('__LAZY:0'), 'Should have __LAZY:0');
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('__LAZY:1'), 'Should have __LAZY:1');
 end;
 
 procedure TTestPreScanner.Scan_LocationOffsets_MatchOriginalBytes;
@@ -239,8 +251,8 @@ begin
 	LResult := PreScanGeminiFile(LBytes);
 	Assert.AreEqual<Integer>(1, Length(LResult.Locations),
 		'Should strip exactly 1 data value (the real one)');
-	Assert.IsTrue(LResult.StrippedJson.Contains('__LAZY:0'));
-	Assert.IsTrue(LResult.StrippedJson.Contains('He said \"data\" is important'),
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('__LAZY:0'));
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('He said \"data\" is important'),
 		'Text with escaped quotes should be preserved');
 end;
 
@@ -253,7 +265,7 @@ begin
 	LJson := '{"key":"data","value":"something"}';
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
-	Assert.AreEqual(LJson, LResult.StrippedJson, 'Should pass through unchanged');
+	Assert.AreEqual(LJson, StrippedJsonStr(LResult), 'Should pass through unchanged');
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations));
 end;
 
@@ -264,7 +276,7 @@ var
 begin
 	SetLength(LBytes, 0);
 	LResult := PreScanGeminiFile(LBytes);
-	Assert.AreEqual('', LResult.StrippedJson);
+	Assert.AreEqual('', StrippedJsonStr(LResult));
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations));
 end;
 
@@ -281,7 +293,7 @@ begin
 	Move(LBytes[0], LBomBytes[3], Length(LBytes));
 
 	LResult := PreScanGeminiFile(LBomBytes);
-	Assert.AreEqual(LJson, LResult.StrippedJson, 'BOM should be skipped in output');
+	Assert.AreEqual(LJson, StrippedJsonStr(LResult), 'BOM should be skipped in output');
 end;
 
 procedure TTestPreScanner.Scan_DataFollowedByNonString_NotStripped;
@@ -293,7 +305,7 @@ begin
 	LJson := '{"data": 42, "name":"test"}';
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
-	Assert.AreEqual(LJson, LResult.StrippedJson, 'Non-string data value should pass through');
+	Assert.AreEqual(LJson, StrippedJsonStr(LResult), 'Non-string data value should pass through');
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations));
 end;
 
@@ -311,7 +323,7 @@ begin
 	LBytes := MakeJsonBytes(LJson);
 	LResult := PreScanGeminiFile(LBytes);
 
-	LRoot := TJSONObject.ParseJSONValue(LResult.StrippedJson);
+	LRoot := TJSONObject.ParseJSONValue(StrippedJsonStr(LResult));
 	try
 		Assert.IsNotNull(LRoot, 'Stripped JSON should be parseable');
 	finally
@@ -352,10 +364,10 @@ begin
 	Assert.IsTrue(Length(LResult.Locations) >= 4,
 		Format('Gadget file should have at least 4 data locations, got %d', [Length(LResult.Locations)]));
 
-	Assert.IsTrue(Length(LResult.StrippedJson) < Length(LBytes),
+	Assert.IsTrue(Length(StrippedJsonStr(LResult)) < Length(LBytes),
 		'Stripped JSON should be smaller than original');
 
-	LRoot := TJSONObject.ParseJSONValue(LResult.StrippedJson);
+	LRoot := TJSONObject.ParseJSONValue(StrippedJsonStr(LResult));
 	try
 		Assert.IsNotNull(LRoot, 'Stripped real file JSON should be parseable');
 	finally
@@ -394,8 +406,80 @@ begin
 	LOriginal := TEncoding.UTF8.GetString(LBytes);
 	LResult := PreScanGeminiFile(LBytes);
 	Assert.AreEqual<Integer>(0, Length(LResult.Locations), 'Tailscale should have 0 locations');
-	Assert.AreEqual(LOriginal, LResult.StrippedJson,
+	Assert.AreEqual(LOriginal, StrippedJsonStr(LResult),
 		'File without resources should be identical after scan');
+end;
+
+procedure TTestPreScanner.Scan_ThresholdBoundary_ExactlyAtThreshold;
+var
+	LDataExact, LDataBelow: string;
+	LJson: string;
+	LBytes: TBytes;
+	LResult: TPreScanResult;
+begin
+	// Value exactly at default threshold (1024) -- should be stripped
+	LDataExact := MakeBase64(1024);
+	LJson := '{"data":"' + LDataExact + '"}';
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(1, Length(LResult.Locations),
+		'Value at threshold (1024) should be stripped');
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains('__LAZY:0'));
+
+	// Value one byte below threshold -- should NOT be stripped
+	LDataBelow := MakeBase64(1023);
+	LJson := '{"data":"' + LDataBelow + '"}';
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(0, Length(LResult.Locations),
+		'Value below threshold (1023) should not be stripped');
+	Assert.IsTrue(StrippedJsonStr(LResult).Contains(LDataBelow));
+end;
+
+procedure TTestPreScanner.Scan_MultiByteUtf8InDataValue_HandledCorrectly;
+var
+	LJson: string;
+	LBytes: TBytes;
+	LResult: TPreScanResult;
+	LLocation: TBase64Location;
+	LExtracted: string;
+	LUtf8Data: string;
+begin
+	// Build a data value with multi-byte UTF-8 chars exceeding threshold
+	LUtf8Data := StringOfChar(#$00E9, 600); // e-acute (2 bytes each in UTF-8)
+	LJson := '{"data":"' + LUtf8Data + '"}';
+	LBytes := MakeJsonBytes(LJson);
+	// UTF-8 encoded length of 600 x e-acute = 1200 bytes, above 1024 threshold
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(1, Length(LResult.Locations),
+		'Multi-byte UTF-8 data value should be stripped');
+
+	// Verify extracted bytes match original
+	LLocation := LResult.Locations[0];
+	LExtracted := TEncoding.UTF8.GetString(LBytes, LLocation.ByteOffset, LLocation.ByteLength);
+	Assert.AreEqual(LUtf8Data, LExtracted,
+		'Extracted multi-byte content should match original');
+end;
+
+procedure TTestPreScanner.Scan_UnterminatedString_DoesNotCrash;
+var
+	LJson: string;
+	LBytes: TBytes;
+	LResult: TPreScanResult;
+begin
+	// Unterminated string value after "data" key
+	LJson := '{"data":"' + MakeBase64(2000);  // no closing quote
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	// Should not crash; may or may not strip (implementation-defined)
+	Assert.IsTrue(True, 'Should not crash on malformed JSON');
+
+	// Unterminated key string
+	LJson := '{"dat';
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(0, Length(LResult.Locations),
+		'Unterminated key should produce no locations');
 end;
 
 // =========================================================================

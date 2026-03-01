@@ -310,17 +310,27 @@ begin
 	inherited;
 end;
 
+/// <summary>Copies the full contents of a memory stream into a byte array.</summary>
+function StreamToBytes(AStream: TMemoryStream): TBytes;
+begin
+	SetLength(Result, AStream.Size);
+	if AStream.Size > 0 then
+	begin
+		AStream.Position := 0;
+		AStream.ReadBuffer(Result[0], AStream.Size);
+	end;
+end;
+
 /// <summary>
 ///   Returns True if the chunk at the given index is a thinking chunk.
+///   Uses direct index lookup (ChunkIndex = array position).
 /// </summary>
 function TGeminiArchive.IsThinkingResource(AChunkIndex: Integer): Boolean;
-var
-	LChunk: TGeminiChunk;
 begin
-	for LChunk in FGeminiFile.Chunks do
-		if LChunk.Index = AChunkIndex then
-			Exit(LChunk.IsThought);
-	Result := False;
+	if (AChunkIndex >= 0) and (AChunkIndex < FGeminiFile.Chunks.Count) then
+		Result := FGeminiFile.Chunks[AChunkIndex].IsThought
+	else
+		Result := False;
 end;
 
 procedure TGeminiArchive.BuildResourceInfos;
@@ -371,12 +381,7 @@ begin
 		finally
 			LFormatter.Free;
 		end;
-		SetLength(FCachedText, LStream.Size);
-		if LStream.Size > 0 then
-		begin
-			LStream.Position := 0;
-			LStream.ReadBuffer(FCachedText[0], LStream.Size);
-		end;
+		FCachedText := StreamToBytes(LStream);
 	finally
 		LStream.Free;
 	end;
@@ -393,12 +398,7 @@ begin
 		finally
 			LMdFormatter.Free;
 		end;
-		SetLength(FCachedMarkdown, LStream.Size);
-		if LStream.Size > 0 then
-		begin
-			LStream.Position := 0;
-			LStream.ReadBuffer(FCachedMarkdown[0], LStream.Size);
-		end;
+		FCachedMarkdown := StreamToBytes(LStream);
 	finally
 		LStream.Free;
 	end;
@@ -418,12 +418,7 @@ begin
 		finally
 			LHtmlFormatter.Free;
 		end;
-		SetLength(FCachedHtml, LStream.Size);
-		if LStream.Size > 0 then
-		begin
-			LStream.Position := 0;
-			LStream.ReadBuffer(FCachedHtml[0], LStream.Size);
-		end;
+		FCachedHtml := StreamToBytes(LStream);
 	finally
 		LStream.Free;
 	end;

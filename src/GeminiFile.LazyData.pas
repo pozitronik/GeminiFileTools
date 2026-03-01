@@ -23,10 +23,10 @@ type
 	end;
 
 	/// <summary>
-	///   Result of pre-scanning a Gemini file: stripped JSON + location map.
+	///   Result of pre-scanning a Gemini file: stripped JSON bytes + location map.
 	/// </summary>
 	TPreScanResult = record
-		StrippedJson: string;                  // JSON with base64 replaced by __LAZY:N
+		StrippedJsonBytes: TBytes;             // UTF-8 bytes with base64 replaced by __LAZY:N
 		Locations: TArray<TBase64Location>;    // indexed by placeholder N
 	end;
 
@@ -36,11 +36,11 @@ type
 /// <summary>
 ///   Pre-scans raw file bytes to find "data" key-value pairs and replaces
 ///   large base64 string values with "__LAZY:N" placeholders.
-///   Returns the stripped JSON string and a map of original byte locations.
+///   Returns the stripped JSON as UTF-8 bytes and a map of original byte locations.
 /// </summary>
 /// <param name="ABytes">Raw file bytes (UTF-8 encoded JSON).</param>
 /// <param name="AThreshold">Minimum byte length of a "data" value to strip. Default 1024.</param>
-/// <returns>Pre-scan result with stripped JSON and location array.</returns>
+/// <returns>Pre-scan result with stripped JSON bytes and location array.</returns>
 function PreScanGeminiFile(const ABytes: TBytes; AThreshold: Integer = 1024): TPreScanResult;
 
 /// <summary>
@@ -239,15 +239,10 @@ begin
 		SetLength(LLocations, LLocationCount);
 		Result.Locations := LLocations;
 
-		// Convert output stream to string
+		// Copy output bytes directly (no UTF-8 string conversion)
+		SetLength(Result.StrippedJsonBytes, LOut.Position);
 		if LOut.Position > 0 then
-		begin
-			SetLength(Result.StrippedJson, 0);
-			Result.StrippedJson := TEncoding.UTF8.GetString(
-				TBytes(LOut.Memory), 0, LOut.Position);
-		end
-		else
-			Result.StrippedJson := '';
+			Move(LOut.Memory^, Result.StrippedJsonBytes[0], LOut.Position);
 
 	finally
 		LOut.Free;

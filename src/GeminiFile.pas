@@ -159,7 +159,7 @@ var
 	LFileStream: TFileStream;
 	LBytes: TBytes;
 	LScanResult: TPreScanResult;
-	LStrippedStream: TStringStream;
+	LBytesStream: TBytesStream;
 begin
 	if not FileExists(AFileName) then
 		raise EFileNotFoundException.CreateFmt('File not found: %s', [AFileName]);
@@ -179,12 +179,12 @@ begin
 	LScanResult := PreScanGeminiFile(LBytes);
 	SetLength(LBytes, 0); // free raw bytes early
 
-	// Parse the stripped JSON (fast -- typically just a few hundred KB)
-	LStrippedStream := TStringStream.Create(LScanResult.StrippedJson, TEncoding.UTF8);
+	// Parse stripped JSON bytes directly (no string conversion round-trip)
+	LBytesStream := TBytesStream.Create(LScanResult.StrippedJsonBytes);
 	try
-		FSystemInstruction := FParser.Parse(LStrippedStream, FRunSettings, FChunks);
+		FSystemInstruction := FParser.Parse(LBytesStream, FRunSettings, FChunks);
 	finally
-		LStrippedStream.Free;
+		LBytesStream.Free;
 	end;
 
 	// Post-process: convert placeholder resources to lazy-loading variants
