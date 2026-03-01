@@ -13,6 +13,7 @@ uses
 	System.SysUtils,
 	System.Classes,
 	System.IOUtils,
+	System.IniFiles,
 	System.Math,
 	System.Generics.Collections,
 	System.AnsiStrings,
@@ -52,6 +53,7 @@ type
 	private
 		FGeminiFile: TGeminiFile;
 		FFileName: string;
+		FBaseName: string;
 		FOpenMode: Integer;
 		FVirtualFiles: TList<TVirtualFileEntry>;
 		FCurrentIndex: Integer;
@@ -98,6 +100,24 @@ type
 		property ChangeVolProc: TChangeVolProcW write FChangeVolProc;
 	end;
 
+	TPluginConfig = record
+		UseOriginalName: Boolean;
+	end;
+
+/// <summary>
+///   Returns the plugin configuration, reading from gemini.ini on first call.
+///   The INI file is expected next to the plugin DLL. Missing file = defaults.
+/// </summary>
+function GetPluginConfig: TPluginConfig;
+
+/// <summary>
+///   Returns the base name for virtual conversation files.
+///   Pure function for testability.
+/// </summary>
+/// <param name="AFileName">Full path to the source Gemini file.</param>
+/// <param name="AUseOriginalName">If True, uses the file's own name; otherwise 'conversation'.</param>
+function GetBaseName(const AFileName: string; AUseOriginalName: Boolean): string;
+
 // --- Exported WCX functions ---
 
 // Unicode (primary)
@@ -130,6 +150,9 @@ var
 	/// Cached custom CSS from gemini.css next to the DLL
 	GCustomCSS: string;
 	GCustomCSSLoaded: Boolean;
+	/// Cached plugin configuration from gemini.ini
+	GPluginConfig: TPluginConfig;
+	GPluginConfigLoaded: Boolean;
 
 /// <summary>
 ///   Returns custom CSS content from gemini.css located next to the plugin DLL.
@@ -152,6 +175,42 @@ begin
 		end;
 	end;
 	Result := GCustomCSS;
+end;
+
+function GetPluginConfig: TPluginConfig;
+var
+	LDllPath: array[0..MAX_PATH] of Char;
+	LIniPath: string;
+	LIni: TIniFile;
+begin
+	if not GPluginConfigLoaded then
+	begin
+		GPluginConfigLoaded := True;
+		GPluginConfig := Default(TPluginConfig);
+		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
+		begin
+			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
+			if TFile.Exists(LIniPath) then
+			begin
+				LIni := TIniFile.Create(LIniPath);
+				try
+					GPluginConfig.UseOriginalName :=
+						LIni.ReadBool('General', 'UseOriginalName', False);
+				finally
+					LIni.Free;
+				end;
+			end;
+		end;
+	end;
+	Result := GPluginConfig;
+end;
+
+function GetBaseName(const AFileName: string; AUseOriginalName: Boolean): string;
+begin
+	if AUseOriginalName then
+		Result := TPath.GetFileNameWithoutExtension(AFileName)
+	else
+		Result := 'conversation';
 end;
 
 function IsValidHandle(hArcData: THandle): Boolean;
@@ -178,6 +237,7 @@ constructor TGeminiArchive.Create(const AFileName: string; AOpenMode: Integer);
 begin
 	inherited Create;
 	FFileName := AFileName;
+	FBaseName := GetBaseName(AFileName, GetPluginConfig.UseOriginalName);
 	FOpenMode := AOpenMode;
 	FVirtualFiles := TList<TVirtualFileEntry>.Create;
 	FCurrentIndex := 0;
@@ -306,25 +366,25 @@ var
 begin
 	FVirtualFiles.Clear;
 
-	// conversation.txt
+	// conversation.txt (or originalname.txt)
 	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := 'conversation.txt';
+	LEntry.Path := FBaseName + '.txt';
 	LEntry.Kind := vfConversationText;
 	LEntry.UnpackedSize := Length(FCachedText);
 	LEntry.FileTime := FFileTime;
 	FVirtualFiles.Add(LEntry);
 
-	// conversation.md
+	// conversation.md (or originalname.md)
 	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := 'conversation.md';
+	LEntry.Path := FBaseName + '.md';
 	LEntry.Kind := vfConversationMarkdown;
 	LEntry.UnpackedSize := Length(FCachedMarkdown);
 	LEntry.FileTime := FFileTime;
 	FVirtualFiles.Add(LEntry);
 
-	// conversation.html
+	// conversation.html (or originalname.html)
 	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := 'conversation.html';
+	LEntry.Path := FBaseName + '.html';
 	LEntry.Kind := vfConversationHtml;
 	LEntry.UnpackedSize := Length(FCachedHtml);
 	LEntry.FileTime := FFileTime;
@@ -332,9 +392,9 @@ begin
 
 	if Length(FResources) > 0 then
 	begin
-		// conversation_full.html (embedded)
+		// conversation_full.html (or originalname_full.html, embedded)
 		LEntry := Default(TVirtualFileEntry);
-		LEntry.Path := 'conversation_full.html';
+		LEntry.Path := FBaseName + '_full.html';
 		LEntry.Kind := vfConversationHtmlEmbedded;
 		LEntry.UnpackedSize := EstimateEmbeddedHtmlSize;
 		LEntry.FileTime := FFileTime;

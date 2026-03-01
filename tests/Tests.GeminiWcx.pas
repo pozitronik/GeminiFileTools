@@ -71,6 +71,15 @@ type
 		procedure ExtractToInvalidPath_ReturnsError;
 	end;
 
+	[TestFixture]
+	TTestGeminiWcxGetBaseName = class
+	public
+		[Test]
+		procedure WithUseOriginalName_ReturnsFileNameWithoutExt;
+		[Test]
+		procedure WithoutUseOriginalName_ReturnsConversation;
+	end;
+
 implementation
 
 // Shared helpers for finding example files
@@ -491,9 +500,28 @@ begin
 	end;
 end;
 
+// ========================================================================
+// TTestGeminiWcxGetBaseName
+// ========================================================================
+
+procedure TTestGeminiWcxGetBaseName.WithUseOriginalName_ReturnsFileNameWithoutExt;
+begin
+	Assert.AreEqual('My Chat', GetBaseName('D:\files\My Chat', True),
+		'File without extension should return its name');
+	Assert.AreEqual('data', GetBaseName('D:\files\data.json', True),
+		'File with extension should return name without extension');
+end;
+
+procedure TTestGeminiWcxGetBaseName.WithoutUseOriginalName_ReturnsConversation;
+begin
+	Assert.AreEqual('conversation', GetBaseName('D:\files\My Chat', False));
+	Assert.AreEqual('conversation', GetBaseName('D:\files\data.json', False));
+end;
+
 initialization
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxVirtualFileList);
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxReadHeader);
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxProcessFile);
+	TDUnitX.RegisterTestFixture(TTestGeminiWcxGetBaseName);
 
 end.
