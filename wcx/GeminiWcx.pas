@@ -69,6 +69,7 @@ type
 		FChangeVolProc: TChangeVolProcW;
 		procedure BuildVirtualFileList;
 		procedure BuildResourceInfos;
+		function IsThinkingResource(AChunkIndex: Integer): Boolean;
 		procedure CacheFormattedContent;
 		function EstimateEmbeddedHtmlSize: Int64;
 		function ExtractVirtualFile(const AEntry: TVirtualFileEntry;
@@ -293,10 +294,24 @@ begin
 	inherited;
 end;
 
+/// <summary>
+///   Returns True if the chunk at the given index is a thinking chunk.
+/// </summary>
+function TGeminiArchive.IsThinkingResource(AChunkIndex: Integer): Boolean;
+var
+	LChunk: TGeminiChunk;
+begin
+	for LChunk in FGeminiFile.Chunks do
+		if LChunk.Index = AChunkIndex then
+			Exit(LChunk.IsThought);
+	Result := False;
+end;
+
 procedure TGeminiArchive.BuildResourceInfos;
 var
 	I: Integer;
 	LPadWidth: Integer;
+	LSubDir: string;
 begin
 	SetLength(FResourceInfos, Length(FResources));
 	LPadWidth := Length(IntToStr(Length(FResources)));
@@ -305,7 +320,11 @@ begin
 
 	for I := 0 to High(FResources) do
 	begin
-		FResourceInfos[I].FileName := Format('resources/resource_%.*d%s',
+		if IsThinkingResource(FResources[I].ChunkIndex) then
+			LSubDir := 'resources/think/'
+		else
+			LSubDir := 'resources/';
+		FResourceInfos[I].FileName := Format(LSubDir + 'resource_%.*d%s',
 			[LPadWidth, I, FResources[I].GetFileExtension]);
 		FResourceInfos[I].MimeType := FResources[I].MimeType;
 		FResourceInfos[I].Base64Data := FResources[I].Base64Data;
@@ -408,6 +427,8 @@ var
 	LEntry: TVirtualFileEntry;
 	I: Integer;
 	LPadWidth: Integer;
+	LHasThinkingResources: Boolean;
+	LSubDir: string;
 begin
 	FVirtualFiles.Clear;
 
@@ -453,6 +474,24 @@ begin
 		LEntry.FileTime := FFileTime;
 		FVirtualFiles.Add(LEntry);
 
+		// resources\think\ subdirectory (only if thinking resources exist)
+		LHasThinkingResources := False;
+		for I := 0 to High(FResources) do
+			if IsThinkingResource(FResources[I].ChunkIndex) then
+			begin
+				LHasThinkingResources := True;
+				Break;
+			end;
+		if LHasThinkingResources then
+		begin
+			LEntry := Default(TVirtualFileEntry);
+			LEntry.Path := 'resources\think';
+			LEntry.Kind := vfResourceDir;
+			LEntry.UnpackedSize := 0;
+			LEntry.FileTime := FFileTime;
+			FVirtualFiles.Add(LEntry);
+		end;
+
 		// Individual resources
 		LPadWidth := Length(IntToStr(Length(FResources)));
 		if LPadWidth < 3 then
@@ -460,8 +499,12 @@ begin
 
 		for I := 0 to High(FResources) do
 		begin
+			if IsThinkingResource(FResources[I].ChunkIndex) then
+				LSubDir := 'resources\think\'
+			else
+				LSubDir := 'resources\';
 			LEntry := Default(TVirtualFileEntry);
-			LEntry.Path := Format('resources\resource_%.*d%s',
+			LEntry.Path := Format(LSubDir + 'resource_%.*d%s',
 				[LPadWidth, I, FResources[I].GetFileExtension]);
 			LEntry.Kind := vfResource;
 			LEntry.UnpackedSize := FResources[I].DecodedSize;

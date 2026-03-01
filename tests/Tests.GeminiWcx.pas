@@ -205,7 +205,7 @@ var
 	LHeader: THeaderDataExW;
 	LCount: Integer;
 	LPath: string;
-	LHasDir, LHasEmbedded: Boolean;
+	LHasDir, LHasEmbedded, LHasThinkDir: Boolean;
 	LFileName: string;
 begin
 	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
@@ -217,19 +217,23 @@ begin
 		LCount := 0;
 		LHasDir := False;
 		LHasEmbedded := False;
+		LHasThinkDir := False;
 		while LArchive.ReadNextHeader(LHeader) = 0 do
 		begin
 			Inc(LCount);
 			LFileName := LHeader.FileName;
 			if LFileName = 'resources' then
 				LHasDir := True;
+			if LFileName = 'resources\think' then
+				LHasThinkDir := True;
 			if LFileName.EndsWith('_full.html') then
 				LHasEmbedded := True;
 			LArchive.ProcessCurrentFile(PK_SKIP, '', '');
 		end;
-		// 3 conversations + embedded html + resources dir + 4 resources = 9
-		Assert.AreEqual<Integer>(9, LCount, 'Should have 9 virtual files');
+		// 3 conversations + embedded html + resources dir + think dir + 4 resources = 10
+		Assert.AreEqual<Integer>(10, LCount, 'Should have 10 virtual files');
 		Assert.IsTrue(LHasDir, 'Should have resources directory');
+		Assert.IsTrue(LHasThinkDir, 'Should have resources\think directory');
 		Assert.IsTrue(LHasEmbedded, 'Should have embedded HTML');
 	finally
 		LArchive.Free;
@@ -254,7 +258,8 @@ begin
 		while LArchive.ReadNextHeader(LHeader) = 0 do
 		begin
 			LFileName := LHeader.FileName;
-			if LFileName.StartsWith('resources\resource_') then
+			if LFileName.StartsWith('resources\resource_') or
+				LFileName.StartsWith('resources\think\resource_') then
 			begin
 				LFoundResource := True;
 				Assert.IsTrue(LFileName.EndsWith('.jpg') or LFileName.EndsWith('.png') or
@@ -492,9 +497,10 @@ begin
 		while LArchive.ReadNextHeader(LHeader) = 0 do
 		begin
 			LFileName := LHeader.FileName;
-			if LFileName.StartsWith('resources\resource_') then
+			if LFileName.StartsWith('resources\resource_') or
+				LFileName.StartsWith('resources\think\resource_') then
 			begin
-				LOutFile := TPath.Combine(LOutDir, ExtractFileName(LFileName));
+				LOutFile := TPath.Combine(LOutDir, TPath.GetFileName(LFileName));
 				Assert.AreEqual<Integer>(0,
 					LArchive.ProcessCurrentFile(PK_EXTRACT, '', LOutFile));
 				Assert.IsTrue(FileExists(LOutFile), 'Extracted resource should exist');
