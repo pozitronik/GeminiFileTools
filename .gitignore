@@ -1,0 +1,13 @@
+/examples
+/.claude
+/coverage
+/run.bat
+/coverage.bat
+/test.bat
+/build.bat
+*.dcu
+*.json
+*.dproj.local
+*.exe
+*.res
+*.rsm
