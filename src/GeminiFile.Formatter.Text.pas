@@ -107,7 +107,10 @@ begin
 			LText := LChunk.GetThinkingText;
 			if LText = '' then
 				LText := LChunk.Text;
-			StreamWriteLn(AOutput, '<Thinking>');
+			if LChunk.CreateTime > 0 then
+				StreamWriteLn(AOutput, '<Thinking> ' + FormatCreateTime(LChunk.CreateTime))
+			else
+				StreamWriteLn(AOutput, '<Thinking>');
 			StreamWriteLn(AOutput, LText);
 			StreamWriteLn(AOutput, '</Thinking>');
 			// Resource indicator for thinking chunks with attachments
@@ -122,6 +125,8 @@ begin
 				grUser: StreamWrite(AOutput, '[USER]');
 				grModel: StreamWrite(AOutput, '[MODEL]');
 			end;
+			if LChunk.CreateTime > 0 then
+				StreamWrite(AOutput, ' ' + FormatCreateTime(LChunk.CreateTime));
 			if LChunk.TokenCount > 0 then
 				StreamWrite(AOutput, ' (' + IntToStr(LChunk.TokenCount) + ' tokens)');
 			StreamWriteLn(AOutput);

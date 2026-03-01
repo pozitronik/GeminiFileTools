@@ -80,6 +80,14 @@ function FormatByteSize(ASize: Int64): string;
 function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
 	AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
 
+/// <summary>
+///   Formats a TDateTime as 'YYYY-MM-DD HH:MM:SS' for display in formatters.
+///   Returns empty string when ADateTime is zero (unset/missing).
+/// </summary>
+/// <param name="ADateTime">UTC date/time value from chunk CreateTime.</param>
+/// <returns>Formatted string or '' if ADateTime = 0.</returns>
+function FormatCreateTime(ADateTime: TDateTime): string;
+
 implementation
 
 function MimeToExtension(const AMimeType: string): string;
@@ -137,6 +145,14 @@ begin
 			Exit(True);
 		end;
 	Result := False;
+end;
+
+function FormatCreateTime(ADateTime: TDateTime): string;
+begin
+	if ADateTime = 0 then
+		Result := ''
+	else
+		Result := FormatDateTime('yyyy-mm-dd hh:nn:ss', ADateTime);
 end;
 
 function FormatByteSize(ASize: Int64): string;

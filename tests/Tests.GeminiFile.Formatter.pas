@@ -51,6 +51,12 @@ type
 		procedure MetadataHeader_IncludesModelAndSettings;
 		[Test]
 		procedure ThinkingChunkWithResource_InsertsAttachedPlaceholder;
+		[Test]
+		procedure CreateTime_DisplayedInHeader;
+		[Test]
+		procedure CreateTimeZero_NotDisplayed;
+		[Test]
+		procedure ThinkingChunkCreateTime_DisplayedInTag;
 	end;
 
 	[TestFixture]
@@ -85,6 +91,8 @@ type
 		procedure MetadataHeader_WithModelInfo;
 		[Test]
 		procedure ThinkingChunkWithResource_InsertsImageLink;
+		[Test]
+		procedure CreateTime_DisplayedAsItalic;
 	end;
 
 	[TestFixture]
@@ -121,6 +129,8 @@ type
 		procedure EmptyConversation_ProducesValidHtml;
 		[Test]
 		procedure ThinkingChunkWithResource_RendersImage;
+		[Test]
+		procedure CreateTime_DisplayedInRoleDiv;
 	end;
 
 implementation
@@ -275,6 +285,40 @@ begin
 	Assert.Contains(LResult, '[Attached: resources/resource_000.png (image/png');
 end;
 
+procedure TTestGeminiTextFormatter.CreateTime_DisplayedInHeader;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, 'Hello', 8);
+	LChunk.CreateTime := EncodeDate(2026, 2, 26) + EncodeTime(0, 1, 2, 0);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '[USER] 2026-02-26 00:01:02 (8 tokens)');
+end;
+
+procedure TTestGeminiTextFormatter.CreateTimeZero_NotDisplayed;
+var
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grUser, 'Hello'));
+	LResult := FormatToString('', nil);
+	// CreateTime is 0 by default -- no date should appear between role and text
+	Assert.IsFalse(LResult.Contains('2026-'), 'No date should appear when CreateTime is zero');
+end;
+
+procedure TTestGeminiTextFormatter.ThinkingChunkCreateTime_DisplayedInTag;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grModel, 'Analyzing...', 0, True);
+	LChunk.CreateTime := EncodeDate(2026, 2, 26) + EncodeTime(0, 1, 2, 0);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '<Thinking> 2026-02-26 00:01:02');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -420,6 +464,18 @@ begin
 	Assert.Contains(LResult, 'Thinking (with attachment)');
 	Assert.Contains(LResult, '![resource_000.jpg](resources/resource_000.jpg)');
 	Assert.Contains(LResult, '</details>');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CreateTime_DisplayedAsItalic;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, 'Hello');
+	LChunk.CreateTime := EncodeDate(2026, 2, 26) + EncodeTime(0, 1, 2, 0);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '*2026-02-26 00:01:02*');
 end;
 
 // ========================================================================
@@ -592,6 +648,19 @@ begin
 	Assert.Contains(LResult, 'Thinking (with attachment)');
 	Assert.Contains(LResult, '<img class="resource-img" src="resources/resource_000.png"');
 	Assert.Contains(LResult, '</details>');
+end;
+
+procedure TTestGeminiHtmlFormatter.CreateTime_DisplayedInRoleDiv;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, 'Hello', 8);
+	LChunk.CreateTime := EncodeDate(2026, 2, 26) + EncodeTime(0, 1, 2, 0);
+	FChunks.Add(LChunk);
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, 'class="time"');
+	Assert.Contains(LResult, '2026-02-26 00:01:02');
 end;
 
 initialization

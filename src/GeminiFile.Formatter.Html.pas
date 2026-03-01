@@ -95,7 +95,8 @@ const
 		'details { margin: 8px 0; background: #f5f5f5; border-radius: 4px; padding: 8px 12px; }' + CRLF +
 		'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
 		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF +
-		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }';
+		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF +
+		'.time { color: #999; font-weight: normal; font-size: 0.85em; }';
 
 { TGeminiHtmlFormatter }
 
@@ -116,7 +117,7 @@ var
 	LText, LThinking: string;
 	LResInfo: TFormatterResourceInfo;
 	LFmt: TFormatSettings;
-	LRoleClass, LRoleLabel: string;
+	LRoleClass, LRoleLabel, LSummary: string;
 begin
 	LFmt := TFormatSettings.Invariant;
 
@@ -173,10 +174,14 @@ begin
 			if LText = '' then
 				LText := LChunk.Text;
 			StreamWriteLn(AOutput, '<details>');
-			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
-				StreamWriteLn(AOutput, '<summary>Thinking (with attachment)</summary>')
-			else
-				StreamWriteLn(AOutput, '<summary>Thinking</summary>');
+			LSummary := 'Thinking';
+			if (LChunk.CreateTime > 0) and FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LChunk.CreateTime)) + ', with attachment)'
+			else if LChunk.CreateTime > 0 then
+				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LChunk.CreateTime)) + ')'
+			else if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				LSummary := LSummary + ' (with attachment)';
+			StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
 			StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
 			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
 			begin
@@ -214,8 +219,11 @@ begin
 
 			StreamWriteLn(AOutput, '<div class="message ' + LRoleClass + '">');
 
-			// Role label with optional token count
+			// Role label with optional timestamp and token count
 			StreamWrite(AOutput, '<div class="role">' + LRoleLabel);
+			if LChunk.CreateTime > 0 then
+				StreamWrite(AOutput, ' <span class="time">' +
+					HtmlEscape(FormatCreateTime(LChunk.CreateTime)) + '</span>');
 			if LChunk.TokenCount > 0 then
 				StreamWrite(AOutput, ' <span class="tokens">(' +
 					IntToStr(LChunk.TokenCount) + ' tokens)</span>');

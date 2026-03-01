@@ -70,7 +70,7 @@ var
 	LText, LThinking: string;
 	LResInfo: TFormatterResourceInfo;
 	LFmt: TFormatSettings;
-	LMeta: string;
+	LMeta, LSummary: string;
 begin
 	LFmt := TFormatSettings.Invariant;
 
@@ -131,14 +131,18 @@ begin
 	begin
 		if LChunk.IsThought then
 		begin
-			// Pure thinking chunk -- collapsible block
+			// Pure thinking chunk -- collapsible block with optional time/attachment indicators
 			LText := LChunk.GetThinkingText;
 			if LText = '' then
 				LText := LChunk.Text;
-			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
-				StreamWriteLn(AOutput, '<details><summary>Thinking (with attachment)</summary>')
-			else
-				StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
+			LSummary := 'Thinking';
+			if (LChunk.CreateTime > 0) and FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				LSummary := LSummary + ' (' + FormatCreateTime(LChunk.CreateTime) + ', with attachment)'
+			else if LChunk.CreateTime > 0 then
+				LSummary := LSummary + ' (' + FormatCreateTime(LChunk.CreateTime) + ')'
+			else if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				LSummary := LSummary + ' (with attachment)';
+			StreamWriteLn(AOutput, '<details><summary>' + LSummary + '</summary>');
 			StreamWriteLn(AOutput);
 			StreamWriteLn(AOutput, LText);
 			StreamWriteLn(AOutput);
@@ -154,6 +158,13 @@ begin
 				grModel: StreamWriteLn(AOutput, '### Model');
 			end;
 			StreamWriteLn(AOutput);
+
+			// Timestamp
+			if LChunk.CreateTime > 0 then
+			begin
+				StreamWriteLn(AOutput, '*' + FormatCreateTime(LChunk.CreateTime) + '*');
+				StreamWriteLn(AOutput);
+			end;
 
 			// Part-level thinking
 			LThinking := LChunk.GetThinkingText;
