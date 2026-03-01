@@ -23,6 +23,7 @@ uses
 	GeminiFile.Parser,
 	GeminiFile.Extractor,
 	GeminiFile,
+	GeminiFile.Formatter.Intf,
 	GeminiFile.Formatter.Text,
 	GeminiFile.Formatter.Md,
 	GeminiFile.Formatter.Html;
@@ -71,10 +72,11 @@ type
 		procedure BuildResourceInfos;
 		function IsThinkingResource(AChunkIndex: Integer): Boolean;
 		procedure CacheFormattedContent;
+		/// <summary>Formats a conversation using the given formatter and returns the result as bytes.</summary>
+		function FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
 		function EstimateEmbeddedHtmlSize: Int64;
 		function ExtractVirtualFile(const AEntry: TVirtualFileEntry;
 			const ADestPath: string): Integer;
-		function WriteStreamToFile(AStream: TStream; const AFilePath: string): Integer;
 		function WriteBytesToFile(const AData: TBytes; const AFilePath: string): Integer;
 		procedure ReportProgress(const AFileName: string; ASize: Integer);
 	public
@@ -357,69 +359,53 @@ begin
 	end;
 end;
 
-procedure TGeminiArchive.CacheFormattedContent;
+function TGeminiArchive.FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
 var
 	LStream: TMemoryStream;
-	LFormatter: TGeminiTextFormatter;
-	LMdFormatter: TGeminiMarkdownFormatter;
-	LHtmlFormatter: TGeminiHtmlFormatter;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		AFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
+			FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
+		Result := StreamToBytes(LStream);
+	finally
+		LStream.Free;
+	end;
+end;
+
+procedure TGeminiArchive.CacheFormattedContent;
+var
+	LTextFmt: TGeminiTextFormatter;
+	LMdFmt: TGeminiMarkdownFormatter;
+	LHtmlFmt: TGeminiHtmlFormatter;
+	LFmt: IGeminiFormatter;
 	LConfig: TPluginConfig;
 begin
 	LConfig := GetPluginConfig;
 
-	// Plain text
-	LStream := TMemoryStream.Create;
-	try
-		LFormatter := TGeminiTextFormatter.Create;
-		try
-			LFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksText;
-			LFormatter.CombineBlocks := LConfig.CombineBlocksText;
-			LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
-				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
-		finally
-			LFormatter.Free;
-		end;
-		FCachedText := StreamToBytes(LStream);
-	finally
-		LStream.Free;
-	end;
+	// Plain text -- interface variable manages lifetime via ref-counting
+	LTextFmt := TGeminiTextFormatter.Create;
+	LTextFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksText;
+	LTextFmt.CombineBlocks := LConfig.CombineBlocksText;
+	LFmt := LTextFmt;
+	FCachedText := FormatToBytes(LFmt);
 
 	// Markdown
-	LStream := TMemoryStream.Create;
-	try
-		LMdFormatter := TGeminiMarkdownFormatter.Create;
-		try
-			LMdFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksMd;
-			LMdFormatter.CombineBlocks := LConfig.CombineBlocksMd;
-			LMdFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
-				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
-		finally
-			LMdFormatter.Free;
-		end;
-		FCachedMarkdown := StreamToBytes(LStream);
-	finally
-		LStream.Free;
-	end;
+	LMdFmt := TGeminiMarkdownFormatter.Create;
+	LMdFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksMd;
+	LMdFmt.CombineBlocks := LConfig.CombineBlocksMd;
+	LFmt := LMdFmt;
+	FCachedMarkdown := FormatToBytes(LFmt);
 
 	// HTML (external resources)
-	LStream := TMemoryStream.Create;
-	try
-		LHtmlFormatter := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
-		try
-			LHtmlFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
-			LHtmlFormatter.DefaultFullWidth := LConfig.DefaultFullWidth;
-			LHtmlFormatter.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-			LHtmlFormatter.RenderMarkdown := LConfig.RenderMarkdown;
-			LHtmlFormatter.CombineBlocks := LConfig.CombineBlocksHtml;
-			LHtmlFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
-				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
-		finally
-			LHtmlFormatter.Free;
-		end;
-		FCachedHtml := StreamToBytes(LStream);
-	finally
-		LStream.Free;
-	end;
+	LHtmlFmt := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
+	LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
+	LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
+	LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+	LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
+	LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
+	LFmt := LHtmlFmt;
+	FCachedHtml := FormatToBytes(LFmt);
 end;
 
 function TGeminiArchive.EstimateEmbeddedHtmlSize: Int64;
@@ -600,8 +586,8 @@ function TGeminiArchive.ExtractVirtualFile(const AEntry: TVirtualFileEntry;
 	const ADestPath: string): Integer;
 var
 	LDir: string;
-	LStream: TMemoryStream;
-	LFormatter: TGeminiHtmlFormatter;
+	LHtmlFmt: TGeminiHtmlFormatter;
+	LFmt: IGeminiFormatter;
 	LConfig: TPluginConfig;
 	I: Integer;
 begin
@@ -627,27 +613,15 @@ begin
 				FResourceInfos[I].Base64Data := FResources[I].Base64Data; // triggers lazy load
 
 			// Generate on-demand (can be large)
-			LStream := TMemoryStream.Create;
-			try
-				LConfig := GetPluginConfig;
-				LFormatter := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
-				try
-					LFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
-					LFormatter.DefaultFullWidth := LConfig.DefaultFullWidth;
-					LFormatter.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-					LFormatter.RenderMarkdown := LConfig.RenderMarkdown;
-					LFormatter.CombineBlocks := LConfig.CombineBlocksHtml;
-					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
-						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
-						FResourceInfos);
-				finally
-					LFormatter.Free;
-				end;
-				LStream.Position := 0;
-				Result := WriteStreamToFile(LStream, ADestPath);
-			finally
-				LStream.Free;
-			end;
+			LConfig := GetPluginConfig;
+			LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
+			LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
+			LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
+			LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+			LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
+			LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
+			LFmt := LHtmlFmt;
+			Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
 
 			// Release base64 data to free memory
 			for I := 0 to High(FResourceInfos) do
@@ -678,32 +652,6 @@ begin
 		end;
 	else
 		Result := E_NOT_SUPPORTED;
-	end;
-end;
-
-function TGeminiArchive.WriteStreamToFile(AStream: TStream; const AFilePath: string): Integer;
-var
-	LFileStream: TFileStream;
-	LBuf: array[0..65535] of Byte;
-	LRead: Integer;
-begin
-	try
-		LFileStream := TFileStream.Create(AFilePath, fmCreate);
-		try
-			repeat
-				LRead := AStream.Read(LBuf, SizeOf(LBuf));
-				if LRead > 0 then
-				begin
-					LFileStream.WriteBuffer(LBuf, LRead);
-					ReportProgress(AFilePath, LRead);
-				end;
-			until LRead = 0;
-		finally
-			LFileStream.Free;
-		end;
-		Result := 0;
-	except
-		Result := E_ECREATE;
 	end;
 end;
 

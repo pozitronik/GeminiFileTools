@@ -14,7 +14,8 @@ uses
 	System.Math,
 	System.Generics.Collections,
 	GeminiFile.Types,
-	GeminiFile.Model;
+	GeminiFile.Model,
+	GeminiFile.Formatter.Intf;
 
 type
 	/// <summary>
@@ -22,7 +23,7 @@ type
 	///   When AEmbedResources is True, images use data: URIs with base64 content.
 	///   When False, images reference external files via relative paths.
 	/// </summary>
-	TGeminiHtmlFormatter = class
+	TGeminiHtmlFormatter = class(TInterfacedObject, IGeminiFormatter)
 	private
 		FEmbedResources: Boolean;
 		FHideEmptyBlocks: Boolean;

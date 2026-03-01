@@ -14,13 +14,14 @@ uses
 	System.Math,
 	System.Generics.Collections,
 	GeminiFile.Types,
-	GeminiFile.Model;
+	GeminiFile.Model,
+	GeminiFile.Formatter.Intf;
 
 type
 	/// <summary>
 	///   Formats a Gemini conversation as Markdown.
 	/// </summary>
-	TGeminiMarkdownFormatter = class
+	TGeminiMarkdownFormatter = class(TInterfacedObject, IGeminiFormatter)
 	private
 		FHideEmptyBlocks: Boolean;
 		FCombineBlocks: Boolean;

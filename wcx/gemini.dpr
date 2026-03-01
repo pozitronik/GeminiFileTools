@@ -21,6 +21,7 @@ uses
 	GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
 	GeminiFile.LazyData in '..\src\GeminiFile.LazyData.pas',
 	GeminiFile in '..\src\GeminiFile.pas',
+	GeminiFile.Formatter.Intf in '..\src\GeminiFile.Formatter.Intf.pas',
 	GeminiFile.Formatter.Utils in '..\src\GeminiFile.Formatter.Utils.pas',
 	GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',
 	GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
