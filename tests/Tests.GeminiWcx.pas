@@ -112,6 +112,8 @@ type
 		procedure DefaultConfig_ExpandThinkingIsFalse;
 		[Test]
 		procedure DefaultConfig_CombineBlocksAllFalse;
+		[Test]
+		procedure DefaultConfig_EnableFormatsAllTrue;
 	end;
 
 implementation
@@ -691,6 +693,17 @@ begin
 	Assert.IsFalse(LConfig.CombineBlocksText, 'CombineBlocksText default');
 	Assert.IsFalse(LConfig.CombineBlocksMd, 'CombineBlocksMd default');
 	Assert.IsFalse(LConfig.CombineBlocksHtml, 'CombineBlocksHtml default');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_EnableFormatsAllTrue;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsTrue(LConfig.EnableText, 'EnableText default');
+	Assert.IsTrue(LConfig.EnableMarkdown, 'EnableMarkdown default');
+	Assert.IsTrue(LConfig.EnableHtml, 'EnableHtml default');
+	Assert.IsTrue(LConfig.EnableHtmlEmbedded, 'EnableHtmlEmbedded default');
 end;
 
 // ========================================================================

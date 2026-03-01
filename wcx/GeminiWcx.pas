@@ -103,6 +103,10 @@ type
 
 	TPluginConfig = record
 		UseOriginalName: Boolean;
+		EnableText: Boolean;
+		EnableMarkdown: Boolean;
+		EnableHtml: Boolean;
+		EnableHtmlEmbedded: Boolean;
 		HideEmptyBlocksText: Boolean;
 		HideEmptyBlocksMd: Boolean;
 		HideEmptyBlocksHtml: Boolean;
@@ -199,6 +203,10 @@ begin
 		// Defaults (record Default zeroes booleans, so set True defaults explicitly)
 		GPluginConfig := Default(TPluginConfig);
 		GPluginConfig.UseOriginalName := True;
+		GPluginConfig.EnableText := True;
+		GPluginConfig.EnableMarkdown := True;
+		GPluginConfig.EnableHtml := True;
+		GPluginConfig.EnableHtmlEmbedded := True;
 		GPluginConfig.HideEmptyBlocksText := True;
 		GPluginConfig.HideEmptyBlocksMd := True;
 		GPluginConfig.HideEmptyBlocksHtml := True;
@@ -212,6 +220,14 @@ begin
 				try
 					GPluginConfig.UseOriginalName :=
 						LIni.ReadBool('General', 'UseOriginalName', True);
+					GPluginConfig.EnableText :=
+						LIni.ReadBool('Formatters', 'EnableText', True);
+					GPluginConfig.EnableMarkdown :=
+						LIni.ReadBool('Formatters', 'EnableMarkdown', True);
+					GPluginConfig.EnableHtml :=
+						LIni.ReadBool('Formatters', 'EnableHtml', True);
+					GPluginConfig.EnableHtmlEmbedded :=
+						LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', True);
 					GPluginConfig.HideEmptyBlocksText :=
 						LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
 					GPluginConfig.HideEmptyBlocksMd :=
@@ -429,42 +445,56 @@ var
 	LPadWidth: Integer;
 	LHasThinkingResources: Boolean;
 	LSubDir: string;
+	LConfig: TPluginConfig;
 begin
 	FVirtualFiles.Clear;
+	LConfig := GetPluginConfig;
 
 	// conversation.txt (or originalname.txt)
-	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := FBaseName + '.txt';
-	LEntry.Kind := vfConversationText;
-	LEntry.UnpackedSize := Length(FCachedText);
-	LEntry.FileTime := FFileTime;
-	FVirtualFiles.Add(LEntry);
+	if LConfig.EnableText then
+	begin
+		LEntry := Default(TVirtualFileEntry);
+		LEntry.Path := FBaseName + '.txt';
+		LEntry.Kind := vfConversationText;
+		LEntry.UnpackedSize := Length(FCachedText);
+		LEntry.FileTime := FFileTime;
+		FVirtualFiles.Add(LEntry);
+	end;
 
 	// conversation.md (or originalname.md)
-	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := FBaseName + '.md';
-	LEntry.Kind := vfConversationMarkdown;
-	LEntry.UnpackedSize := Length(FCachedMarkdown);
-	LEntry.FileTime := FFileTime;
-	FVirtualFiles.Add(LEntry);
+	if LConfig.EnableMarkdown then
+	begin
+		LEntry := Default(TVirtualFileEntry);
+		LEntry.Path := FBaseName + '.md';
+		LEntry.Kind := vfConversationMarkdown;
+		LEntry.UnpackedSize := Length(FCachedMarkdown);
+		LEntry.FileTime := FFileTime;
+		FVirtualFiles.Add(LEntry);
+	end;
 
 	// conversation.html (or originalname.html)
-	LEntry := Default(TVirtualFileEntry);
-	LEntry.Path := FBaseName + '.html';
-	LEntry.Kind := vfConversationHtml;
-	LEntry.UnpackedSize := Length(FCachedHtml);
-	LEntry.FileTime := FFileTime;
-	FVirtualFiles.Add(LEntry);
+	if LConfig.EnableHtml then
+	begin
+		LEntry := Default(TVirtualFileEntry);
+		LEntry.Path := FBaseName + '.html';
+		LEntry.Kind := vfConversationHtml;
+		LEntry.UnpackedSize := Length(FCachedHtml);
+		LEntry.FileTime := FFileTime;
+		FVirtualFiles.Add(LEntry);
+	end;
 
 	if Length(FResources) > 0 then
 	begin
 		// conversation_full.html (or originalname_full.html, embedded)
-		LEntry := Default(TVirtualFileEntry);
-		LEntry.Path := FBaseName + '_full.html';
-		LEntry.Kind := vfConversationHtmlEmbedded;
-		LEntry.UnpackedSize := EstimateEmbeddedHtmlSize;
-		LEntry.FileTime := FFileTime;
-		FVirtualFiles.Add(LEntry);
+		if LConfig.EnableHtmlEmbedded then
+		begin
+			LEntry := Default(TVirtualFileEntry);
+			LEntry.Path := FBaseName + '_full.html';
+			LEntry.Kind := vfConversationHtmlEmbedded;
+			LEntry.UnpackedSize := EstimateEmbeddedHtmlSize;
+			LEntry.FileTime := FFileTime;
+			FVirtualFiles.Add(LEntry);
+		end;
 
 		// resources\ directory
 		LEntry := Default(TVirtualFileEntry);
