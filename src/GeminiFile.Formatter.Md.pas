@@ -57,6 +57,11 @@ uses
 
 { TGeminiMarkdownFormatter }
 
+procedure WriteMarkdownImage(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
+begin
+	StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
+end;
+
 procedure TGeminiMarkdownFormatter.WriteDocumentStart(AOutput: TStream;
 	ARunSettings: TGeminiRunSettings;
 	const ASystemInstruction: string);
@@ -144,7 +149,7 @@ begin
 	if AHasResource then
 	begin
 		StreamWriteLn(AOutput);
-		StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
+		WriteMarkdownImage(AOutput, AResInfo);
 	end;
 end;
 
@@ -211,7 +216,7 @@ procedure TGeminiMarkdownFormatter.WriteContentResource(AOutput: TStream;
 	const AResInfo: TFormatterResourceInfo);
 begin
 	StreamWriteLn(AOutput);
-	StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
+	WriteMarkdownImage(AOutput, AResInfo);
 end;
 
 procedure TGeminiMarkdownFormatter.WriteRemoteHint(AOutput: TStream;

@@ -129,6 +129,25 @@ const
 
 { TGeminiHtmlFormatter }
 
+/// <summary>Writes an img tag (embedded or external) plus resource-info div.</summary>
+procedure WriteHtmlResource(AOutput: TStream; AEmbedResources: Boolean;
+	const AResInfo: TFormatterResourceInfo);
+begin
+	if AEmbedResources and (AResInfo.Base64Data <> '') then
+	begin
+		StreamWrite(AOutput, '<img class="resource-img" src="data:' +
+			HtmlEscape(AResInfo.MimeType) + ';base64,');
+		StreamWrite(AOutput, AResInfo.Base64Data);
+		StreamWriteLn(AOutput, '" />');
+	end
+	else
+		StreamWriteLn(AOutput, '<img class="resource-img" src="' +
+			HtmlEscape(AResInfo.FileName) + '" />');
+	StreamWriteLn(AOutput, '<div class="resource-info">' +
+		HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
+		', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
+end;
+
 constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean; const ACustomCSS: string);
 begin
 	inherited Create;
@@ -238,21 +257,7 @@ begin
 		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
 
 	if AHasResource then
-	begin
-		if FEmbedResources and (AResInfo.Base64Data <> '') then
-		begin
-			StreamWrite(AOutput, '<img class="resource-img" src="data:' +
-				HtmlEscape(AResInfo.MimeType) + ';base64,');
-			StreamWrite(AOutput, AResInfo.Base64Data);
-			StreamWriteLn(AOutput, '" />');
-		end
-		else
-			StreamWriteLn(AOutput, '<img class="resource-img" src="' +
-				HtmlEscape(AResInfo.FileName) + '" />');
-		StreamWriteLn(AOutput, '<div class="resource-info">' +
-			HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
-			', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
-	end;
+		WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
 
 	if LUseCombinedParts then
 		StreamWriteLn(AOutput, '</div>');
@@ -334,19 +339,7 @@ end;
 procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream;
 	const AResInfo: TFormatterResourceInfo);
 begin
-	if FEmbedResources and (AResInfo.Base64Data <> '') then
-	begin
-		StreamWrite(AOutput, '<img class="resource-img" src="data:' +
-			HtmlEscape(AResInfo.MimeType) + ';base64,');
-		StreamWrite(AOutput, AResInfo.Base64Data);
-		StreamWriteLn(AOutput, '" />');
-	end
-	else
-		StreamWriteLn(AOutput, '<img class="resource-img" src="' +
-			HtmlEscape(AResInfo.FileName) + '" />');
-	StreamWriteLn(AOutput, '<div class="resource-info">' +
-		HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
-		', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
+	WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
 end;
 
 procedure TGeminiHtmlFormatter.WriteRemoteHint(AOutput: TStream;
