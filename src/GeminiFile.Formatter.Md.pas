@@ -1,7 +1,7 @@
 /// <summary>
 ///   Markdown formatter for Gemini conversations.
 ///   Produces Markdown with headings, image links, and collapsible thinking blocks.
-///   Supports optional block combining for consecutive same-kind chunks.
+///   Overrides TGeminiFormatterBase template methods to supply Markdown output.
 /// </summary>
 unit GeminiFile.Formatter.Md;
 
@@ -12,82 +12,60 @@ uses
 	System.Classes,
 	System.IOUtils,
 	System.Math,
-	System.Generics.Collections,
 	GeminiFile.Types,
 	GeminiFile.Model,
-	GeminiFile.Formatter.Intf;
+	GeminiFile.Grouping,
+	GeminiFile.Formatter.Base;
 
 type
 	/// <summary>
 	///   Formats a Gemini conversation as Markdown.
 	/// </summary>
-	TGeminiMarkdownFormatter = class(TInterfacedObject, IGeminiFormatter)
-	private
-		FHideEmptyBlocks: Boolean;
-		FCombineBlocks: Boolean;
-	public
-		constructor Create;
-		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
-		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
-		/// <summary>When True, consecutive same-kind chunks are merged into a single visual block.</summary>
-		property CombineBlocks: Boolean read FCombineBlocks write FCombineBlocks;
-		/// <summary>
-		///   Writes the formatted conversation to the output stream as UTF-8 Markdown.
-		/// </summary>
-		/// <param name="AOutput">Target stream.</param>
-		/// <param name="AChunks">Conversation chunks in order.</param>
-		/// <param name="ASystemInstruction">System instruction text. Empty if none.</param>
-		/// <param name="ARunSettings">Model run settings.</param>
-		/// <param name="AResources">Resource info records for link generation.</param>
-		procedure FormatToStream(
-			AOutput: TStream;
-			AChunks: TObjectList<TGeminiChunk>;
-			const ASystemInstruction: string;
+	TGeminiMarkdownFormatter = class(TGeminiFormatterBase)
+	protected
+		procedure WriteDocumentStart(AOutput: TStream;
 			ARunSettings: TGeminiRunSettings;
-			const AResources: TArray<TFormatterResourceInfo>
-		);
+			const ASystemInstruction: string); override;
+		procedure BeginThinkingGroup(AOutput: TStream;
+			ACreateTime: TDateTime; AAnyResource: Boolean); override;
+		procedure WriteThinkingSubBlock(AOutput: TStream;
+			const AText: string; AHasResource: Boolean;
+			const AResInfo: TFormatterResourceInfo;
+			ASubIndex, ASubCount: Integer); override;
+		procedure EndThinkingGroup(AOutput: TStream); override;
+		procedure BeginContentGroup(AOutput: TStream;
+			AKind: TChunkGroupKind; ACreateTime: TDateTime;
+			ATotalTokens: Integer; APendingRemoteCount: Integer); override;
+		procedure WriteContentSeparator(AOutput: TStream); override;
+		procedure WritePartThinking(AOutput: TStream;
+			const AThinking: string); override;
+		procedure WriteContentText(AOutput: TStream;
+			const AText: string); override;
+		procedure WriteContentResource(AOutput: TStream;
+			const AResInfo: TFormatterResourceInfo); override;
+		procedure WriteRemoteHint(AOutput: TStream;
+			ACount: Integer); override;
+		procedure WriteGroupSpacing(AOutput: TStream;
+			AKind: TChunkGroupKind;
+			AHadVisibleContent: Boolean); override;
 	end;
 
 implementation
 
 uses
-	GeminiFile.Formatter.Utils,
-	GeminiFile.Grouping;
+	GeminiFile.Formatter.Utils;
 
 { TGeminiMarkdownFormatter }
 
-constructor TGeminiMarkdownFormatter.Create;
-begin
-	inherited Create;
-	FHideEmptyBlocks := True;
-	FCombineBlocks := False;
-end;
-
-procedure TGeminiMarkdownFormatter.FormatToStream(
-	AOutput: TStream;
-	AChunks: TObjectList<TGeminiChunk>;
-	const ASystemInstruction: string;
+procedure TGeminiMarkdownFormatter.WriteDocumentStart(AOutput: TStream;
 	ARunSettings: TGeminiRunSettings;
-	const AResources: TArray<TFormatterResourceInfo>);
+	const ASystemInstruction: string);
 var
-	LGroups: TArray<TChunkGroup>;
-	LGroup: TChunkGroup;
-	LChunk: TGeminiChunk;
-	LText, LThinking: string;
-	LResInfo: TFormatterResourceInfo;
-	LHasResource: Boolean;
-	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
-	LMeta, LSummary: string;
-	I: Integer;
-	LFirstContent: Boolean;
-	LSubBlockIndex: Integer;
-	LAnyResource: Boolean;
+	LMeta: string;
 begin
 	LFmt := TFormatSettings.Invariant;
-	LPendingRemoteCount := 0;
 
-	// Title
 	StreamWriteLn(AOutput, '# Gemini Conversation');
 	StreamWriteLn(AOutput);
 
@@ -125,7 +103,6 @@ begin
 		StreamWriteLn(AOutput);
 	end;
 
-	// System instruction
 	if ASystemInstruction <> '' then
 	begin
 		StreamWriteLn(AOutput, '## System Instruction');
@@ -138,151 +115,117 @@ begin
 	StreamWriteLn(AOutput);
 	StreamWriteLn(AOutput, '## Conversation');
 	StreamWriteLn(AOutput);
+end;
 
-	// Build groups
-	LGroups := GroupConsecutiveChunks(AChunks, FCombineBlocks);
+procedure TGeminiMarkdownFormatter.BeginThinkingGroup(AOutput: TStream;
+	ACreateTime: TDateTime; AAnyResource: Boolean);
+var
+	LSummary: string;
+begin
+	LSummary := 'Thinking';
+	if (ACreateTime > 0) and AAnyResource then
+		LSummary := LSummary + ' (' + FormatCreateTime(ACreateTime) + ', with attachment)'
+	else if ACreateTime > 0 then
+		LSummary := LSummary + ' (' + FormatCreateTime(ACreateTime) + ')'
+	else if AAnyResource then
+		LSummary := LSummary + ' (with attachment)';
+	StreamWriteLn(AOutput, '<details><summary>' + LSummary + '</summary>');
+	StreamWriteLn(AOutput);
+end;
 
-	// Iterate groups
-	for I := 0 to High(LGroups) do
+procedure TGeminiMarkdownFormatter.WriteThinkingSubBlock(AOutput: TStream;
+	const AText: string; AHasResource: Boolean;
+	const AResInfo: TFormatterResourceInfo;
+	ASubIndex, ASubCount: Integer);
+begin
+	if ASubIndex > 0 then
+		StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, AText);
+	if AHasResource then
 	begin
-		LGroup := LGroups[I];
+		StreamWriteLn(AOutput);
+		StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
+	end;
+end;
 
-		if LGroup.Kind = gkThinking then
-		begin
-			// Thinking group -- one <details> block with combined summary
-			LSummary := 'Thinking';
-			// Check if any chunk in the group has a resource
-			LAnyResource := False;
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-				if FindResourceForChunk(AResources, LGroup.Chunks[LSubBlockIndex].Index, LResInfo) then
-				begin
-					LAnyResource := True;
-					Break;
-				end;
-			if (LGroup.FirstCreateTime > 0) and LAnyResource then
-				LSummary := LSummary + ' (' + FormatCreateTime(LGroup.FirstCreateTime) + ', with attachment)'
-			else if LGroup.FirstCreateTime > 0 then
-				LSummary := LSummary + ' (' + FormatCreateTime(LGroup.FirstCreateTime) + ')'
-			else if LAnyResource then
-				LSummary := LSummary + ' (with attachment)';
-			StreamWriteLn(AOutput, '<details><summary>' + LSummary + '</summary>');
-			StreamWriteLn(AOutput);
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-			begin
-				LChunk := LGroup.Chunks[LSubBlockIndex];
-				// Blank line separator between sub-blocks
-				if LSubBlockIndex > 0 then
-					StreamWriteLn(AOutput);
-				LText := LChunk.GetThinkingText;
-				if LText = '' then
-					LText := LChunk.Text;
-				StreamWriteLn(AOutput, LText);
-				// Resource image link
-				if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
-				begin
-					StreamWriteLn(AOutput);
-					StreamWriteLn(AOutput, '![' + TPath.GetFileName(LResInfo.FileName) + '](' + LResInfo.FileName + ')');
-				end;
-			end;
-			StreamWriteLn(AOutput);
-			StreamWriteLn(AOutput, '</details>');
-		end
-		else
-		begin
-			// User/Model group -- lazy header emission for empty block handling
-			LFirstContent := True;
+procedure TGeminiMarkdownFormatter.EndThinkingGroup(AOutput: TStream);
+begin
+	StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, '</details>');
+end;
 
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-			begin
-				LChunk := LGroup.Chunks[LSubBlockIndex];
-
-				// Pre-compute text and resource for empty block detection
-				LText := LChunk.GetFullText;
-				LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
-
-				// Skip empty display blocks (no text, no embedded resource)
-				if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
-				begin
-					if LChunk.DriveImageId <> '' then
-						Inc(LPendingRemoteCount);
-					Continue;
-				end;
-
-				// Emit pending remote attachment hint before first visible content
-				if LFirstContent and (LPendingRemoteCount > 0) then
-				begin
-					StreamWriteLn(AOutput, '*' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)*');
-					StreamWriteLn(AOutput);
-					LPendingRemoteCount := 0;
-				end;
-
-				// Emit role heading lazily on first visible sub-block
-				if LFirstContent then
-				begin
-					case LGroup.Kind of
-						gkUser: StreamWriteLn(AOutput, '### User');
-						gkModel: StreamWriteLn(AOutput, '### Model');
-					end;
-					StreamWriteLn(AOutput);
-
-					// Timestamp
-					if LGroup.FirstCreateTime > 0 then
-					begin
-						StreamWriteLn(AOutput, '*' + FormatCreateTime(LGroup.FirstCreateTime) + '*');
-						StreamWriteLn(AOutput);
-					end;
-
-					// Token count (shown when non-zero)
-					if LGroup.TotalTokenCount > 0 then
-					begin
-						StreamWriteLn(AOutput, '*(' + IntToStr(LGroup.TotalTokenCount) + ' tokens)*');
-						StreamWriteLn(AOutput);
-					end;
-
-					LFirstContent := False;
-				end
-				else
-				begin
-					// Sub-block separator (Markdown horizontal rule)
-					StreamWriteLn(AOutput);
-					StreamWriteLn(AOutput, '---');
-					StreamWriteLn(AOutput);
-				end;
-
-				// Part-level thinking
-				LThinking := LChunk.GetThinkingText;
-				if LThinking <> '' then
-				begin
-					StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
-					StreamWriteLn(AOutput);
-					StreamWriteLn(AOutput, LThinking);
-					StreamWriteLn(AOutput);
-					StreamWriteLn(AOutput, '</details>');
-					StreamWriteLn(AOutput);
-				end;
-
-				// Main text
-				if LText <> '' then
-					StreamWriteLn(AOutput, LText);
-
-				// Resource image link
-				if LHasResource then
-				begin
-					StreamWriteLn(AOutput);
-					StreamWriteLn(AOutput, '![' + TPath.GetFileName(LResInfo.FileName) + '](' + LResInfo.FileName + ')');
-				end;
-			end;
-		end;
-
+procedure TGeminiMarkdownFormatter.BeginContentGroup(AOutput: TStream;
+	AKind: TChunkGroupKind; ACreateTime: TDateTime;
+	ATotalTokens: Integer; APendingRemoteCount: Integer);
+begin
+	if APendingRemoteCount > 0 then
+	begin
+		StreamWriteLn(AOutput, '*' + IntToStr(APendingRemoteCount) + ' remote attachment(s)*');
 		StreamWriteLn(AOutput);
 	end;
 
-	// Trailing remote attachment hint (empty blocks at end of conversation)
-	if LPendingRemoteCount > 0 then
+	case AKind of
+		gkUser: StreamWriteLn(AOutput, '### User');
+		gkModel: StreamWriteLn(AOutput, '### Model');
+	end;
+	StreamWriteLn(AOutput);
+
+	if ACreateTime > 0 then
 	begin
-		StreamWriteLn(AOutput, '*' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)*');
+		StreamWriteLn(AOutput, '*' + FormatCreateTime(ACreateTime) + '*');
 		StreamWriteLn(AOutput);
 	end;
+
+	if ATotalTokens > 0 then
+	begin
+		StreamWriteLn(AOutput, '*(' + IntToStr(ATotalTokens) + ' tokens)*');
+		StreamWriteLn(AOutput);
+	end;
+end;
+
+procedure TGeminiMarkdownFormatter.WriteContentSeparator(AOutput: TStream);
+begin
+	StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, '---');
+	StreamWriteLn(AOutput);
+end;
+
+procedure TGeminiMarkdownFormatter.WritePartThinking(AOutput: TStream;
+	const AThinking: string);
+begin
+	StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
+	StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, AThinking);
+	StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, '</details>');
+	StreamWriteLn(AOutput);
+end;
+
+procedure TGeminiMarkdownFormatter.WriteContentText(AOutput: TStream;
+	const AText: string);
+begin
+	StreamWriteLn(AOutput, AText);
+end;
+
+procedure TGeminiMarkdownFormatter.WriteContentResource(AOutput: TStream;
+	const AResInfo: TFormatterResourceInfo);
+begin
+	StreamWriteLn(AOutput);
+	StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
+end;
+
+procedure TGeminiMarkdownFormatter.WriteRemoteHint(AOutput: TStream;
+	ACount: Integer);
+begin
+	StreamWriteLn(AOutput, '*' + IntToStr(ACount) + ' remote attachment(s)*');
+	StreamWriteLn(AOutput);
+end;
+
+procedure TGeminiMarkdownFormatter.WriteGroupSpacing(AOutput: TStream;
+	AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
+begin
+	// Markdown always emits a blank line between groups
+	StreamWriteLn(AOutput);
 end;
 
 end.

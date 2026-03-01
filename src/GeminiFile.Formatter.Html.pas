@@ -2,7 +2,7 @@
 ///   HTML formatter for Gemini conversations.
 ///   Supports two modes: external resource links and embedded base64 data URIs.
 ///   Produces self-contained HTML with inline CSS styling.
-///   Supports optional block combining for consecutive same-kind chunks.
+///   Overrides all 15 TGeminiFormatterBase template methods to supply HTML output.
 /// </summary>
 unit GeminiFile.Formatter.Html;
 
@@ -12,10 +12,10 @@ uses
 	System.SysUtils,
 	System.Classes,
 	System.Math,
-	System.Generics.Collections,
 	GeminiFile.Types,
 	GeminiFile.Model,
-	GeminiFile.Formatter.Intf;
+	GeminiFile.Grouping,
+	GeminiFile.Formatter.Base;
 
 type
 	/// <summary>
@@ -23,54 +23,65 @@ type
 	///   When AEmbedResources is True, images use data: URIs with base64 content.
 	///   When False, images reference external files via relative paths.
 	/// </summary>
-	TGeminiHtmlFormatter = class(TInterfacedObject, IGeminiFormatter)
+	TGeminiHtmlFormatter = class(TGeminiFormatterBase)
 	private
 		FEmbedResources: Boolean;
-		FHideEmptyBlocks: Boolean;
 		FDefaultFullWidth: Boolean;
 		FDefaultExpandThinking: Boolean;
 		FRenderMarkdown: Boolean;
 		FCustomCSS: string;
-		FCombineBlocks: Boolean;
+	protected
+		// -- Abstract method overrides (11) -----------------------------------
+		procedure WriteDocumentStart(AOutput: TStream;
+			ARunSettings: TGeminiRunSettings;
+			const ASystemInstruction: string); override;
+		procedure BeginThinkingGroup(AOutput: TStream;
+			ACreateTime: TDateTime; AAnyResource: Boolean); override;
+		procedure WriteThinkingSubBlock(AOutput: TStream;
+			const AText: string; AHasResource: Boolean;
+			const AResInfo: TFormatterResourceInfo;
+			ASubIndex, ASubCount: Integer); override;
+		procedure EndThinkingGroup(AOutput: TStream); override;
+		procedure BeginContentGroup(AOutput: TStream;
+			AKind: TChunkGroupKind; ACreateTime: TDateTime;
+			ATotalTokens: Integer; APendingRemoteCount: Integer); override;
+		procedure WriteContentSeparator(AOutput: TStream); override;
+		procedure WritePartThinking(AOutput: TStream;
+			const AThinking: string); override;
+		procedure WriteContentText(AOutput: TStream;
+			const AText: string); override;
+		procedure WriteContentResource(AOutput: TStream;
+			const AResInfo: TFormatterResourceInfo); override;
+		procedure WriteRemoteHint(AOutput: TStream;
+			ACount: Integer); override;
+		procedure WriteGroupSpacing(AOutput: TStream;
+			AKind: TChunkGroupKind;
+			AHadVisibleContent: Boolean); override;
+		// -- Virtual method overrides (4) -------------------------------------
+		procedure WriteDocumentEnd(AOutput: TStream); override;
+		procedure EndContentGroup(AOutput: TStream); override;
+		procedure BeginContentSubBlock(AOutput: TStream;
+			AUseCombinedLayout: Boolean); override;
+		procedure EndContentSubBlock(AOutput: TStream;
+			AUseCombinedLayout: Boolean); override;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
 		/// <param name="AEmbedResources">True to embed base64 images, False for external links.</param>
 		/// <param name="ACustomCSS">Optional CSS appended after built-in styles for user overrides.</param>
 		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = '');
-		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
-		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
 		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
 		property DefaultFullWidth: Boolean read FDefaultFullWidth write FDefaultFullWidth;
 		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
 		property DefaultExpandThinking: Boolean read FDefaultExpandThinking write FDefaultExpandThinking;
 		/// <summary>When True, Markdown in model output is rendered as HTML (bold, italic, code, etc).</summary>
 		property RenderMarkdown: Boolean read FRenderMarkdown write FRenderMarkdown;
-		/// <summary>When True, consecutive same-kind chunks are merged into a single visual block.</summary>
-		property CombineBlocks: Boolean read FCombineBlocks write FCombineBlocks;
-
-		/// <summary>
-		///   Writes the formatted conversation to the output stream as UTF-8 HTML.
-		/// </summary>
-		/// <param name="AOutput">Target stream.</param>
-		/// <param name="AChunks">Conversation chunks in order.</param>
-		/// <param name="ASystemInstruction">System instruction text. Empty if none.</param>
-		/// <param name="ARunSettings">Model run settings.</param>
-		/// <param name="AResources">Resource info records for link/embed generation.</param>
-		procedure FormatToStream(
-			AOutput: TStream;
-			AChunks: TObjectList<TGeminiChunk>;
-			const ASystemInstruction: string;
-			ARunSettings: TGeminiRunSettings;
-			const AResources: TArray<TFormatterResourceInfo>
-		);
 	end;
 
 implementation
 
 uses
 	GeminiFile.Formatter.Utils,
-	GeminiFile.Markdown,
-	GeminiFile.Grouping;
+	GeminiFile.Markdown;
 
 const
 	CSS_STYLES =
@@ -122,39 +133,19 @@ constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean; const ACustomC
 begin
 	inherited Create;
 	FEmbedResources := AEmbedResources;
-	FHideEmptyBlocks := True;
 	FRenderMarkdown := True;
 	FCustomCSS := ACustomCSS;
-	FCombineBlocks := False;
 end;
 
-procedure TGeminiHtmlFormatter.FormatToStream(
-	AOutput: TStream;
-	AChunks: TObjectList<TGeminiChunk>;
-	const ASystemInstruction: string;
+procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream;
 	ARunSettings: TGeminiRunSettings;
-	const AResources: TArray<TFormatterResourceInfo>);
+	const ASystemInstruction: string);
 var
-	LGroups: TArray<TChunkGroup>;
-	LGroup: TChunkGroup;
-	LChunk: TGeminiChunk;
-	LText, LThinking: string;
-	LResInfo: TFormatterResourceInfo;
-	LHasResource: Boolean;
-	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
-	LRoleClass, LRoleLabel, LSummary: string;
 	LBodyClasses: string;
-	I: Integer;
-	LFirstContent: Boolean;
-	LSubBlockIndex: Integer;
-	LAnyResource: Boolean;
-	LUseCombinedParts: Boolean;
 begin
 	LFmt := TFormatSettings.Invariant;
-	LPendingRemoteCount := 0;
 
-	// HTML header
 	StreamWriteLn(AOutput, '<!DOCTYPE html>');
 	StreamWriteLn(AOutput, '<html lang="en">');
 	StreamWriteLn(AOutput, '<head>');
@@ -167,6 +158,7 @@ begin
 		StreamWriteLn(AOutput, FCustomCSS);
 	StreamWriteLn(AOutput, '</style>');
 	StreamWriteLn(AOutput, '</head>');
+
 	// Build body class list from active options
 	LBodyClasses := '';
 	if FDefaultFullWidth then
@@ -179,7 +171,6 @@ begin
 	else
 		StreamWriteLn(AOutput, '<body>');
 
-	// Title
 	StreamWriteLn(AOutput, '<h1>Gemini Conversation</h1>');
 
 	// Metadata
@@ -208,208 +199,173 @@ begin
 
 	StreamWriteLn(AOutput, '<hr>');
 	StreamWriteLn(AOutput, '<div class="section-title">Conversation</div>');
+end;
 
-	// Build groups
-	LGroups := GroupConsecutiveChunks(AChunks, FCombineBlocks);
+procedure TGeminiHtmlFormatter.BeginThinkingGroup(AOutput: TStream;
+	ACreateTime: TDateTime; AAnyResource: Boolean);
+var
+	LSummary: string;
+begin
+	if FDefaultExpandThinking then
+		StreamWriteLn(AOutput, '<details class="thinking" open>')
+	else
+		StreamWriteLn(AOutput, '<details class="thinking">');
 
-	// Iterate groups
-	for I := 0 to High(LGroups) do
+	LSummary := 'Thinking';
+	if (ACreateTime > 0) and AAnyResource then
+		LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(ACreateTime)) + ', with attachment)'
+	else if ACreateTime > 0 then
+		LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(ACreateTime)) + ')'
+	else if AAnyResource then
+		LSummary := LSummary + ' (with attachment)';
+	StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteThinkingSubBlock(AOutput: TStream;
+	const AText: string; AHasResource: Boolean;
+	const AResInfo: TFormatterResourceInfo;
+	ASubIndex, ASubCount: Integer);
+var
+	LUseCombinedParts: Boolean;
+begin
+	LUseCombinedParts := ASubCount > 1;
+	if LUseCombinedParts then
+		StreamWriteLn(AOutput, '<div class="combined-part">');
+
+	if FRenderMarkdown then
+		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
+	else
+		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
+
+	if AHasResource then
 	begin
-		LGroup := LGroups[I];
-
-		if LGroup.Kind = gkThinking then
+		if FEmbedResources and (AResInfo.Base64Data <> '') then
 		begin
-			// Thinking group -- one <details> with combined summary
-			if FDefaultExpandThinking then
-				StreamWriteLn(AOutput, '<details class="thinking" open>')
-			else
-				StreamWriteLn(AOutput, '<details class="thinking">');
-			LSummary := 'Thinking';
-			// Check if any chunk in the group has a resource
-			LAnyResource := False;
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-				if FindResourceForChunk(AResources, LGroup.Chunks[LSubBlockIndex].Index, LResInfo) then
-				begin
-					LAnyResource := True;
-					Break;
-				end;
-			if (LGroup.FirstCreateTime > 0) and LAnyResource then
-				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LGroup.FirstCreateTime)) + ', with attachment)'
-			else if LGroup.FirstCreateTime > 0 then
-				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LGroup.FirstCreateTime)) + ')'
-			else if LAnyResource then
-				LSummary := LSummary + ' (with attachment)';
-			StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
-
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-			begin
-				LChunk := LGroup.Chunks[LSubBlockIndex];
-				LText := LChunk.GetThinkingText;
-				if LText = '' then
-					LText := LChunk.Text;
-
-				// Use combined-part divs when group has multiple chunks
-				LUseCombinedParts := Length(LGroup.Chunks) > 1;
-				if LUseCombinedParts then
-					StreamWriteLn(AOutput, '<div class="combined-part">');
-
-				if FRenderMarkdown then
-					StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LText) + '</div>')
-				else
-					StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
-				if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
-				begin
-					if FEmbedResources and (LResInfo.Base64Data <> '') then
-					begin
-						StreamWrite(AOutput, '<img class="resource-img" src="data:' +
-							HtmlEscape(LResInfo.MimeType) + ';base64,');
-						StreamWrite(AOutput, LResInfo.Base64Data);
-						StreamWriteLn(AOutput, '" />');
-					end
-					else
-						StreamWriteLn(AOutput, '<img class="resource-img" src="' +
-							HtmlEscape(LResInfo.FileName) + '" />');
-					StreamWriteLn(AOutput, '<div class="resource-info">' +
-						HtmlEscape(LResInfo.FileName) + ' (' + HtmlEscape(LResInfo.MimeType) +
-						', ~' + FormatByteSize(LResInfo.DecodedSize) + ')</div>');
-				end;
-
-				if LUseCombinedParts then
-					StreamWriteLn(AOutput, '</div>');
-			end;
-			StreamWriteLn(AOutput, '</details>');
+			StreamWrite(AOutput, '<img class="resource-img" src="data:' +
+				HtmlEscape(AResInfo.MimeType) + ';base64,');
+			StreamWrite(AOutput, AResInfo.Base64Data);
+			StreamWriteLn(AOutput, '" />');
 		end
 		else
+			StreamWriteLn(AOutput, '<img class="resource-img" src="' +
+				HtmlEscape(AResInfo.FileName) + '" />');
+		StreamWriteLn(AOutput, '<div class="resource-info">' +
+			HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
+			', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
+	end;
+
+	if LUseCombinedParts then
+		StreamWriteLn(AOutput, '</div>');
+end;
+
+procedure TGeminiHtmlFormatter.EndThinkingGroup(AOutput: TStream);
+begin
+	StreamWriteLn(AOutput, '</details>');
+end;
+
+procedure TGeminiHtmlFormatter.BeginContentGroup(AOutput: TStream;
+	AKind: TChunkGroupKind; ACreateTime: TDateTime;
+	ATotalTokens: Integer; APendingRemoteCount: Integer);
+var
+	LRoleClass, LRoleLabel: string;
+begin
+	case AKind of
+		gkUser:
 		begin
-			// User/Model group -- lazy header emission for empty block handling
-			case LGroup.Kind of
-				gkUser:
-				begin
-					LRoleClass := 'user';
-					LRoleLabel := 'User';
-				end;
-			else
-				begin
-					LRoleClass := 'model';
-					LRoleLabel := 'Model';
-				end;
-			end;
-
-			LFirstContent := True;
-
-			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
-			begin
-				LChunk := LGroup.Chunks[LSubBlockIndex];
-
-				// Pre-compute text and resource for empty block detection
-				LText := LChunk.GetFullText;
-				LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
-
-				// Skip empty display blocks (no text, no embedded resource)
-				if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
-				begin
-					if LChunk.DriveImageId <> '' then
-						Inc(LPendingRemoteCount);
-					Continue;
-				end;
-
-				// Emit message container and role header lazily on first visible sub-block
-				if LFirstContent then
-				begin
-					StreamWriteLn(AOutput, '<div class="message ' + LRoleClass + '">');
-
-					// Role label with optional timestamp and token count
-					StreamWrite(AOutput, '<div class="role">' + LRoleLabel);
-					if LGroup.FirstCreateTime > 0 then
-						StreamWrite(AOutput, ' <span class="time">' +
-							HtmlEscape(FormatCreateTime(LGroup.FirstCreateTime)) + '</span>');
-					if LGroup.TotalTokenCount > 0 then
-						StreamWrite(AOutput, ' <span class="tokens">(' +
-							IntToStr(LGroup.TotalTokenCount) + ' tokens)</span>');
-					StreamWriteLn(AOutput, '</div>');
-
-					// Emit pending remote attachment hint
-					if LPendingRemoteCount > 0 then
-					begin
-						StreamWriteLn(AOutput, '<div class="remote-attachments" title="' +
-							IntToStr(LPendingRemoteCount) +
-							' remote attachment(s) uploaded before this message">' +
-							IntToStr(LPendingRemoteCount) + ' remote attachment(s)</div>');
-						LPendingRemoteCount := 0;
-					end;
-
-					LFirstContent := False;
-				end;
-
-				// Use combined-part divs when group has multiple chunks
-				LUseCombinedParts := Length(LGroup.Chunks) > 1;
-				if LUseCombinedParts then
-					StreamWriteLn(AOutput, '<div class="combined-part">');
-
-				// Part-level thinking
-				LThinking := LChunk.GetThinkingText;
-				if LThinking <> '' then
-				begin
-					if FDefaultExpandThinking then
-						StreamWriteLn(AOutput, '<details class="thinking" open>')
-					else
-						StreamWriteLn(AOutput, '<details class="thinking">');
-					StreamWriteLn(AOutput, '<summary>Thinking</summary>');
-					if FRenderMarkdown then
-						StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LThinking) + '</div>')
-					else
-						StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LThinking) + '</div>');
-					StreamWriteLn(AOutput, '</details>');
-				end;
-
-				// Main text
-				if LText <> '' then
-				begin
-					if FRenderMarkdown then
-						StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LText) + '</div>')
-					else
-						StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
-				end;
-
-				// Resource
-				if LHasResource then
-				begin
-					if FEmbedResources and (LResInfo.Base64Data <> '') then
-					begin
-						StreamWrite(AOutput, '<img class="resource-img" src="data:' +
-							HtmlEscape(LResInfo.MimeType) + ';base64,');
-						StreamWrite(AOutput, LResInfo.Base64Data);
-						StreamWriteLn(AOutput, '" />');
-					end
-					else
-					begin
-						StreamWriteLn(AOutput, '<img class="resource-img" src="' +
-							HtmlEscape(LResInfo.FileName) + '" />');
-					end;
-					StreamWriteLn(AOutput, '<div class="resource-info">' +
-						HtmlEscape(LResInfo.FileName) + ' (' + HtmlEscape(LResInfo.MimeType) +
-						', ~' + FormatByteSize(LResInfo.DecodedSize) + ')</div>');
-				end;
-
-				if LUseCombinedParts then
-					StreamWriteLn(AOutput, '</div>');
-			end;
-
-			// Close message container if it was opened
-			if not LFirstContent then
-				StreamWriteLn(AOutput, '</div>');
+			LRoleClass := 'user';
+			LRoleLabel := 'User';
+		end;
+	else
+		begin
+			LRoleClass := 'model';
+			LRoleLabel := 'Model';
 		end;
 	end;
 
-	// Trailing remote attachment hint (empty blocks at end of conversation)
-	if LPendingRemoteCount > 0 then
-	begin
-		StreamWriteLn(AOutput, '<div class="message user">');
-		StreamWriteLn(AOutput, '<div class="remote-attachments">' +
-			IntToStr(LPendingRemoteCount) + ' remote attachment(s)</div>');
-		StreamWriteLn(AOutput, '</div>');
-	end;
+	StreamWriteLn(AOutput, '<div class="message ' + LRoleClass + '">');
 
+	// Role label with optional timestamp and token count
+	StreamWrite(AOutput, '<div class="role">' + LRoleLabel);
+	if ACreateTime > 0 then
+		StreamWrite(AOutput, ' <span class="time">' +
+			HtmlEscape(FormatCreateTime(ACreateTime)) + '</span>');
+	if ATotalTokens > 0 then
+		StreamWrite(AOutput, ' <span class="tokens">(' +
+			IntToStr(ATotalTokens) + ' tokens)</span>');
+	StreamWriteLn(AOutput, '</div>');
+
+	// Remote attachment hint (inside the message container, after role label)
+	if APendingRemoteCount > 0 then
+		StreamWriteLn(AOutput, '<div class="remote-attachments" title="' +
+			IntToStr(APendingRemoteCount) +
+			' remote attachment(s) uploaded before this message">' +
+			IntToStr(APendingRemoteCount) + ' remote attachment(s)</div>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteContentSeparator(AOutput: TStream);
+begin
+	// HTML uses combined-part divs for sub-block separation, no explicit separator
+end;
+
+procedure TGeminiHtmlFormatter.WritePartThinking(AOutput: TStream;
+	const AThinking: string);
+begin
+	if FDefaultExpandThinking then
+		StreamWriteLn(AOutput, '<details class="thinking" open>')
+	else
+		StreamWriteLn(AOutput, '<details class="thinking">');
+	StreamWriteLn(AOutput, '<summary>Thinking</summary>');
+	if FRenderMarkdown then
+		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AThinking) + '</div>')
+	else
+		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AThinking) + '</div>');
+	StreamWriteLn(AOutput, '</details>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteContentText(AOutput: TStream;
+	const AText: string);
+begin
+	if FRenderMarkdown then
+		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
+	else
+		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream;
+	const AResInfo: TFormatterResourceInfo);
+begin
+	if FEmbedResources and (AResInfo.Base64Data <> '') then
+	begin
+		StreamWrite(AOutput, '<img class="resource-img" src="data:' +
+			HtmlEscape(AResInfo.MimeType) + ';base64,');
+		StreamWrite(AOutput, AResInfo.Base64Data);
+		StreamWriteLn(AOutput, '" />');
+	end
+	else
+		StreamWriteLn(AOutput, '<img class="resource-img" src="' +
+			HtmlEscape(AResInfo.FileName) + '" />');
+	StreamWriteLn(AOutput, '<div class="resource-info">' +
+		HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
+		', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteRemoteHint(AOutput: TStream;
+	ACount: Integer);
+begin
+	StreamWriteLn(AOutput, '<div class="message user">');
+	StreamWriteLn(AOutput, '<div class="remote-attachments">' +
+		IntToStr(ACount) + ' remote attachment(s)</div>');
+	StreamWriteLn(AOutput, '</div>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteGroupSpacing(AOutput: TStream;
+	AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
+begin
+	// HTML uses CSS margins for spacing, no blank lines needed
+end;
+
+procedure TGeminiHtmlFormatter.WriteDocumentEnd(AOutput: TStream);
+begin
 	// Controls panel
 	StreamWriteLn(AOutput, '<div id="controls">');
 	if FDefaultFullWidth then
@@ -431,9 +387,27 @@ begin
 	StreamWriteLn(AOutput, '}');
 	StreamWriteLn(AOutput, '</script>');
 
-	// HTML footer
 	StreamWriteLn(AOutput, '</body>');
 	StreamWriteLn(AOutput, '</html>');
+end;
+
+procedure TGeminiHtmlFormatter.EndContentGroup(AOutput: TStream);
+begin
+	StreamWriteLn(AOutput, '</div>');
+end;
+
+procedure TGeminiHtmlFormatter.BeginContentSubBlock(AOutput: TStream;
+	AUseCombinedLayout: Boolean);
+begin
+	if AUseCombinedLayout then
+		StreamWriteLn(AOutput, '<div class="combined-part">');
+end;
+
+procedure TGeminiHtmlFormatter.EndContentSubBlock(AOutput: TStream;
+	AUseCombinedLayout: Boolean);
+begin
+	if AUseCombinedLayout then
+		StreamWriteLn(AOutput, '</div>');
 end;
 
 end.
