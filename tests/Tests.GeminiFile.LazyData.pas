@@ -108,9 +108,6 @@ type
 	// =====================================================================
 	[TestFixture]
 	TTestLazyIntegration = class
-	private
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 	public
 		[Test]
 		procedure LoadFromFile_WithResources_ResourcesAreLazy;
@@ -130,7 +127,8 @@ implementation
 
 uses
 	System.JSON,
-	System.NetEncoding;
+	System.NetEncoding,
+	Tests.GeminiFile.TestUtils;
 
 // =========================================================================
 // Helpers
@@ -781,24 +779,6 @@ end;
 // =========================================================================
 // TTestLazyIntegration
 // =========================================================================
-
-function TTestLazyIntegration.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestLazyIntegration.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if FileExists(Result) then
-		Exit;
-	Result := '';
-end;
 
 procedure TTestLazyIntegration.LoadFromFile_WithResources_ResourcesAreLazy;
 var

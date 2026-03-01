@@ -281,8 +281,29 @@ begin
 end;
 
 function TGeminiFile.GetResourceCount: Integer;
+var
+	LChunk: GeminiFile.Model.TGeminiChunk;
+	LPart: GeminiFile.Model.TGeminiPart;
+	LFound: Boolean;
 begin
-	Result := Length(GetResources);
+	Result := 0;
+	for LChunk in FChunks do
+	begin
+		if LChunk.InlineImage <> nil then
+		begin
+			Inc(Result);
+			Continue;
+		end;
+		LFound := False;
+		for LPart in LChunk.Parts do
+			if LPart.InlineData <> nil then
+			begin
+				LFound := True;
+				Break;
+			end;
+		if LFound then
+			Inc(Result);
+	end;
 end;
 
 function TGeminiFile.ExtractAllResources(const AOutputDir: string; AThreaded: Boolean; const ANamePrefix: string): Integer;

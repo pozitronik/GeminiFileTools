@@ -70,9 +70,7 @@ begin
 
 	LAbsDir := TPath.GetFullPath(AOutputDir);
 	ForceDirectories(LAbsDir);
-	LPadWidth := Length(IntToStr(Result));
-	if LPadWidth < 3 then
-		LPadWidth := 3;
+	LPadWidth := ResourcePadWidth(Result);
 
 	if AThreaded and (Result > 1) then
 	begin

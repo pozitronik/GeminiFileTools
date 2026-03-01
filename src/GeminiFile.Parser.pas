@@ -204,6 +204,8 @@ begin
 		on E: Exception do
 			raise EGeminiParseError.Create('Failed to parse JSON: ' + E.Message);
 	end;
+	if LRoot = nil then
+		raise EGeminiParseError.Create('Failed to parse JSON: parser returned nil');
 	try
 		LObj := TJSONObject(LRoot);
 

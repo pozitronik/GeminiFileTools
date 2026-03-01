@@ -25,9 +25,6 @@ uses
 type
 	[TestFixture]
 	TTestGeminiWcxVirtualFileList = class
-	private
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 	public
 		[Test]
 		procedure FileWithNoResources_ThreeVirtualFiles;
@@ -45,9 +42,6 @@ type
 
 	[TestFixture]
 	TTestGeminiWcxReadHeader = class
-	private
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 	public
 		[Test]
 		procedure IteratesAllFiles_ThenEndArchive;
@@ -59,9 +53,6 @@ type
 
 	[TestFixture]
 	TTestGeminiWcxProcessFile = class
-	private
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 	public
 		[Test]
 		procedure Skip_AdvancesToNextFile;
@@ -76,8 +67,6 @@ type
 	[TestFixture]
 	TTestGeminiWcxProcessHtml = class
 	private
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 		/// <summary>
 		///   Extracts the HTML virtual file from an archive and returns its content.
 		///   Skips entries until conversation.html is found.
@@ -127,8 +116,6 @@ type
 	TTestGeminiWcxExportedApi = class
 	private
 		FTempDir: string;
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 		function CreateTempFile(const AName, AContent: string): string;
 		function CreateTempFileBytes(const AName: string; const ABytes: TBytes): string;
 	public
@@ -195,8 +182,6 @@ type
 	TTestGeminiWcxAnsiCompat = class
 	private
 		FTempDir: string;
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 		function CreateTempFile(const AName, AContent: string): string;
 	public
 		[Setup]
@@ -229,8 +214,6 @@ type
 	TTestGeminiWcxExtractSpecial = class
 	private
 		FTempDir: string;
-		function ExamplesDir: string;
-		function FindExample(const AName: string): string;
 	public
 		[Setup]
 		procedure Setup;
@@ -255,58 +238,8 @@ type
 
 implementation
 
-// Shared helpers for finding example files
-
-function TTestGeminiWcxVirtualFileList.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxVirtualFileList.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
-
-function TTestGeminiWcxReadHeader.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxReadHeader.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
-
-function TTestGeminiWcxProcessFile.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxProcessFile.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
+uses
+	Tests.GeminiFile.TestUtils;
 
 // ========================================================================
 // TTestGeminiWcxVirtualFileList
@@ -487,9 +420,7 @@ begin
 	try
 		LGeminiFile.LoadFromFile(LPath);
 		LResources := LGeminiFile.GetResources;
-		LPadWidth := Length(IntToStr(Length(LResources)));
-		if LPadWidth < 3 then
-			LPadWidth := 3;
+		LPadWidth := ResourcePadWidth(Length(LResources));
 
 		SetLength(LExpectedPaths, Length(LResources));
 		for I := 0 to High(LResources) do
@@ -764,23 +695,6 @@ end;
 // TTestGeminiWcxProcessHtml
 // ========================================================================
 
-function TTestGeminiWcxProcessHtml.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxProcessHtml.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
-
 function TTestGeminiWcxProcessHtml.ExtractHtmlContent(const AExampleName: string): string;
 var
 	LArchive: TGeminiArchive;
@@ -954,23 +868,6 @@ end;
 // ========================================================================
 // TTestGeminiWcxExportedApi
 // ========================================================================
-
-function TTestGeminiWcxExportedApi.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxExportedApi.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
 
 function TTestGeminiWcxExportedApi.CreateTempFile(const AName, AContent: string): string;
 begin
@@ -1379,23 +1276,6 @@ end;
 // TTestGeminiWcxAnsiCompat
 // ========================================================================
 
-function TTestGeminiWcxAnsiCompat.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxAnsiCompat.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
-
 function TTestGeminiWcxAnsiCompat.CreateTempFile(const AName, AContent: string): string;
 begin
 	Result := TPath.Combine(FTempDir, AName);
@@ -1582,23 +1462,6 @@ end;
 // ========================================================================
 // TTestGeminiWcxExtractSpecial
 // ========================================================================
-
-function TTestGeminiWcxExtractSpecial.ExamplesDir: string;
-begin
-	Result := TPath.Combine(
-		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-		'examples');
-	if not TDirectory.Exists(Result) then
-		Result := TPath.GetFullPath('..\examples');
-end;
-
-function TTestGeminiWcxExtractSpecial.FindExample(const AName: string): string;
-begin
-	Result := TPath.Combine(ExamplesDir, AName);
-	if not FileExists(Result) then
-		Result := '';
-end;
 
 procedure TTestGeminiWcxExtractSpecial.Setup;
 begin

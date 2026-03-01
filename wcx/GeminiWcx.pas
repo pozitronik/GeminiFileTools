@@ -340,9 +340,7 @@ var
 	LSubDir: string;
 begin
 	SetLength(FResourceInfos, Length(FResources));
-	LPadWidth := Length(IntToStr(Length(FResources)));
-	if LPadWidth < 3 then
-		LPadWidth := 3;
+	LPadWidth := ResourcePadWidth(Length(FResources));
 
 	for I := 0 to High(FResources) do
 	begin
@@ -604,6 +602,7 @@ var
 	LDir: string;
 	LStream: TMemoryStream;
 	LFormatter: TGeminiHtmlFormatter;
+	LConfig: TPluginConfig;
 	I: Integer;
 begin
 	// Ensure destination directory exists
@@ -630,13 +629,14 @@ begin
 			// Generate on-demand (can be large)
 			LStream := TMemoryStream.Create;
 			try
+				LConfig := GetPluginConfig;
 				LFormatter := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
 				try
-					LFormatter.HideEmptyBlocks := GetPluginConfig.HideEmptyBlocksHtml;
-					LFormatter.DefaultFullWidth := GetPluginConfig.DefaultFullWidth;
-					LFormatter.DefaultExpandThinking := GetPluginConfig.DefaultExpandThinking;
-					LFormatter.RenderMarkdown := GetPluginConfig.RenderMarkdown;
-					LFormatter.CombineBlocks := GetPluginConfig.CombineBlocksHtml;
+					LFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
+					LFormatter.DefaultFullWidth := LConfig.DefaultFullWidth;
+					LFormatter.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+					LFormatter.RenderMarkdown := LConfig.RenderMarkdown;
+					LFormatter.CombineBlocks := LConfig.CombineBlocksHtml;
 					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
 						FResourceInfos);

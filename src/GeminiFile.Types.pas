@@ -88,6 +88,13 @@ function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
 /// <returns>Formatted string or '' if ADateTime = 0.</returns>
 function FormatCreateTime(ADateTime: TDateTime): string;
 
+/// <summary>
+///   Computes the zero-padded width for resource filenames (minimum 3 digits).
+/// </summary>
+/// <param name="ACount">Total number of resources.</param>
+/// <returns>Number of digits to use for the numeric index.</returns>
+function ResourcePadWidth(ACount: Integer): Integer;
+
 implementation
 
 function MimeToExtension(const AMimeType: string): string;
@@ -168,6 +175,13 @@ begin
 		Result := Format('%.1f MB', [ASize / (1024.0 * 1024.0)], LFmt)
 	else
 		Result := Format('%.2f GB', [ASize / (1024.0 * 1024.0 * 1024.0)], LFmt);
+end;
+
+function ResourcePadWidth(ACount: Integer): Integer;
+begin
+	Result := Length(IntToStr(ACount));
+	if Result < 3 then
+		Result := 3;
 end;
 
 end.

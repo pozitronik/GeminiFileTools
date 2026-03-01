@@ -24,9 +24,6 @@ uses
 type
   [TestFixture]
   TTestGeminiFileIntegration = class
-  private
-    function ExamplesDir: string;
-    function FindExample(const AName: string): string;
   public
     // Tailscale tests
     [Test]
@@ -63,35 +60,10 @@ type
 
 implementation
 
+uses
+	Tests.GeminiFile.TestUtils;
+
 { TTestGeminiFileIntegration }
-
-function TTestGeminiFileIntegration.ExamplesDir: string;
-begin
-  // Navigate from tests/Win64/Debug/ up to project root, then into examples
-  // Full path: <root>/tests/Win64/Debug/GemViewTests.exe
-  // GetDirectoryName x1: <root>/tests/Win64/Debug
-  // GetDirectoryName x2: <root>/tests/Win64
-  // GetDirectoryName x3: <root>/tests
-  // GetDirectoryName x4: <root>
-  Result := TPath.Combine(
-    TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-      TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
-    'examples');
-  // Fallback: try relative path from working directory
-  if not TDirectory.Exists(Result) then
-    Result := TPath.GetFullPath('..\examples');
-end;
-
-/// <summary>
-///   Attempts to find an example file by name. Returns empty string if not found.
-/// </summary>
-function TTestGeminiFileIntegration.FindExample(const AName: string): string;
-begin
-  Result := TPath.Combine(ExamplesDir, AName);
-  if FileExists(Result) then
-    Exit;
-  Result := '';
-end;
 
 procedure TTestGeminiFileIntegration.Tailscale_ChunkCounts;
 var

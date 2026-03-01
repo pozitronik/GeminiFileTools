@@ -37,7 +37,8 @@ uses
   Tests.GeminiFile.Markdown in 'Tests.GeminiFile.Markdown.pas',
   Tests.GeminiWcx in 'Tests.GeminiWcx.pas',
   Tests.GeminiFile.Grouping in 'Tests.GeminiFile.Grouping.pas',
-  Tests.GeminiFile.LazyData in 'Tests.GeminiFile.LazyData.pas';
+  Tests.GeminiFile.LazyData in 'Tests.GeminiFile.LazyData.pas',
+  Tests.GeminiFile.TestUtils in 'Tests.GeminiFile.TestUtils.pas';
 
 var
   LRunner: ITestRunner;

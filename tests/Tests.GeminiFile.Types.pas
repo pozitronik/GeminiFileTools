@@ -57,6 +57,9 @@ type
     [Test]
     procedure FormatCreateTime_Zero_ReturnsEmpty;
 
+    [Test]
+    procedure FormatCreateTime_NonZero_ReturnsFormattedString;
+
     // FormatByteSize tests
     [Test]
     procedure FormatByteSize_Bytes;
@@ -68,9 +71,29 @@ type
     procedure FormatByteSize_GB;
     [Test]
     procedure FormatByteSize_Zero;
+
+    // FindResourceForChunk tests
+    [Test]
+    procedure FindResourceForChunk_Found_ReturnsTrueAndInfo;
+    [Test]
+    procedure FindResourceForChunk_NotFound_ReturnsFalse;
+    [Test]
+    procedure FindResourceForChunk_EmptyArray_ReturnsFalse;
+    [Test]
+    procedure FindResourceForChunk_MultipleResources_FindsCorrectOne;
+
+    // ResourcePadWidth tests
+    [Test]
+    procedure ResourcePadWidth_SmallCount_ReturnsMinimum3;
+    [Test]
+    procedure ResourcePadWidth_LargeCount_ReturnsDigitCount;
   end;
 
 implementation
+
+uses
+  System.SysUtils,
+  System.DateUtils;
 
 { TTestGeminiFileTypes }
 
@@ -205,6 +228,77 @@ end;
 procedure TTestGeminiFileTypes.FormatByteSize_Zero;
 begin
   Assert.AreEqual('0 B', FormatByteSize(0));
+end;
+
+procedure TTestGeminiFileTypes.FormatCreateTime_NonZero_ReturnsFormattedString;
+var
+  LDT: TDateTime;
+begin
+  LDT := EncodeDate(2026, 2, 26) + EncodeTime(0, 1, 2, 0);
+  Assert.AreEqual('2026-02-26 00:01:02', FormatCreateTime(LDT));
+end;
+
+procedure TTestGeminiFileTypes.FindResourceForChunk_Found_ReturnsTrueAndInfo;
+var
+  LResources: TArray<TFormatterResourceInfo>;
+  LInfo: TFormatterResourceInfo;
+begin
+  SetLength(LResources, 1);
+  LResources[0].ChunkIndex := 5;
+  LResources[0].FileName := 'resource_000.png';
+  LResources[0].MimeType := 'image/png';
+  Assert.IsTrue(FindResourceForChunk(LResources, 5, LInfo));
+  Assert.AreEqual('resource_000.png', LInfo.FileName);
+  Assert.AreEqual('image/png', LInfo.MimeType);
+end;
+
+procedure TTestGeminiFileTypes.FindResourceForChunk_NotFound_ReturnsFalse;
+var
+  LResources: TArray<TFormatterResourceInfo>;
+  LInfo: TFormatterResourceInfo;
+begin
+  SetLength(LResources, 1);
+  LResources[0].ChunkIndex := 5;
+  Assert.IsFalse(FindResourceForChunk(LResources, 99, LInfo));
+end;
+
+procedure TTestGeminiFileTypes.FindResourceForChunk_EmptyArray_ReturnsFalse;
+var
+  LResources: TArray<TFormatterResourceInfo>;
+  LInfo: TFormatterResourceInfo;
+begin
+  SetLength(LResources, 0);
+  Assert.IsFalse(FindResourceForChunk(LResources, 0, LInfo));
+end;
+
+procedure TTestGeminiFileTypes.FindResourceForChunk_MultipleResources_FindsCorrectOne;
+var
+  LResources: TArray<TFormatterResourceInfo>;
+  LInfo: TFormatterResourceInfo;
+begin
+  SetLength(LResources, 3);
+  LResources[0].ChunkIndex := 2;
+  LResources[0].FileName := 'first.png';
+  LResources[1].ChunkIndex := 7;
+  LResources[1].FileName := 'second.jpg';
+  LResources[2].ChunkIndex := 12;
+  LResources[2].FileName := 'third.gif';
+  Assert.IsTrue(FindResourceForChunk(LResources, 7, LInfo));
+  Assert.AreEqual('second.jpg', LInfo.FileName);
+end;
+
+procedure TTestGeminiFileTypes.ResourcePadWidth_SmallCount_ReturnsMinimum3;
+begin
+  Assert.AreEqual<Integer>(3, ResourcePadWidth(1));
+  Assert.AreEqual<Integer>(3, ResourcePadWidth(99));
+  Assert.AreEqual<Integer>(3, ResourcePadWidth(999));
+end;
+
+procedure TTestGeminiFileTypes.ResourcePadWidth_LargeCount_ReturnsDigitCount;
+begin
+  Assert.AreEqual<Integer>(4, ResourcePadWidth(1000));
+  Assert.AreEqual<Integer>(4, ResourcePadWidth(9999));
+  Assert.AreEqual<Integer>(5, ResourcePadWidth(10000));
 end;
 
 initialization

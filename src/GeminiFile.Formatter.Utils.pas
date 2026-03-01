@@ -46,12 +46,32 @@ begin
 end;
 
 function HtmlEscape(const AStr: string): string;
+var
+	LSB: TStringBuilder;
+	I: Integer;
+	LCh: Char;
 begin
-	Result := AStr;
-	Result := StringReplace(Result, '&', '&amp;', [rfReplaceAll]);
-	Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
+	if AStr = '' then
+		Exit('');
+
+	LSB := TStringBuilder.Create(Length(AStr) + Length(AStr) div 8);
+	try
+		for I := 1 to Length(AStr) do
+		begin
+			LCh := AStr[I];
+			case LCh of
+				'&': LSB.Append('&amp;');
+				'<': LSB.Append('&lt;');
+				'>': LSB.Append('&gt;');
+				'"': LSB.Append('&quot;');
+			else
+				LSB.Append(LCh);
+			end;
+		end;
+		Result := LSB.ToString;
+	finally
+		LSB.Free;
+	end;
 end;
 
 end.
