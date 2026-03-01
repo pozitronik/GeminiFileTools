@@ -197,6 +197,7 @@ begin
 		GPluginConfigLoaded := True;
 		// Defaults (record Default zeroes booleans, so set True defaults explicitly)
 		GPluginConfig := Default(TPluginConfig);
+		GPluginConfig.UseOriginalName := True;
 		GPluginConfig.HideEmptyBlocksText := True;
 		GPluginConfig.HideEmptyBlocksMd := True;
 		GPluginConfig.HideEmptyBlocksHtml := True;
@@ -209,7 +210,7 @@ begin
 				LIni := TIniFile.Create(LIniPath);
 				try
 					GPluginConfig.UseOriginalName :=
-						LIni.ReadBool('General', 'UseOriginalName', False);
+						LIni.ReadBool('General', 'UseOriginalName', True);
 					GPluginConfig.HideEmptyBlocksText :=
 						LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
 					GPluginConfig.HideEmptyBlocksMd :=

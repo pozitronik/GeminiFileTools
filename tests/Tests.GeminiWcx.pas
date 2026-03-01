@@ -223,7 +223,7 @@ begin
 			LFileName := LHeader.FileName;
 			if LFileName = 'resources' then
 				LHasDir := True;
-			if LFileName = 'conversation_full.html' then
+			if LFileName.EndsWith('_full.html') then
 				LHasEmbedded := True;
 			LArchive.ProcessCurrentFile(PK_SKIP, '', '');
 		end;
@@ -361,7 +361,7 @@ begin
 	try
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('conversation.txt', LFileName);
+		Assert.AreEqual('Tailscale.txt', LFileName);
 		Assert.IsTrue(LHeader.UnpSize > 0, 'UnpSize should be non-zero');
 		Assert.IsTrue(LHeader.FileTime > 0, 'FileTime should be non-zero');
 		Assert.AreEqual<Integer>($20, LHeader.FileAttr); // FILE_ATTRIBUTE_ARCHIVE
@@ -422,7 +422,7 @@ begin
 		// Read first header
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('conversation.txt', LFileName);
+		Assert.AreEqual('Tailscale.txt', LFileName);
 
 		// Skip it
 		Assert.AreEqual<Integer>(0, LArchive.ProcessCurrentFile(PK_SKIP, '', ''));
@@ -430,7 +430,7 @@ begin
 		// Read next header -- should be different file
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('conversation.md', LFileName);
+		Assert.AreEqual('Tailscale.md', LFileName);
 		LArchive.ProcessCurrentFile(PK_SKIP, '', '');
 	finally
 		LArchive.Free;
@@ -450,11 +450,11 @@ begin
 
 	LOutDir := TPath.Combine(TPath.GetTempPath,
 		'GemViewTest_Wcx_' + TGUID.NewGuid.ToString);
-	LOutFile := TPath.Combine(LOutDir, 'conversation.txt');
+	LOutFile := TPath.Combine(LOutDir, 'Tailscale.txt');
 
 	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
 	try
-		// Read first header (conversation.txt)
+		// Read first header (Tailscale.txt)
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 
 		// Extract it
@@ -579,9 +579,9 @@ begin
 		while LArchive.ReadNextHeader(LHeader) = 0 do
 		begin
 			LFileName := LHeader.FileName;
-			if LFileName = 'conversation.html' then
+			if LFileName.EndsWith('.html') and (not LFileName.EndsWith('_full.html')) then
 			begin
-				LOutFile := TPath.Combine(LOutDir, 'conversation.html');
+				LOutFile := TPath.Combine(LOutDir, LFileName);
 				LArchive.ProcessCurrentFile(PK_EXTRACT, '', LOutFile);
 				if FileExists(LOutFile) then
 					Result := TFile.ReadAllText(LOutFile, TEncoding.UTF8);
