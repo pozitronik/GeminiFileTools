@@ -66,6 +66,16 @@ type
     [Test]
     procedure Parse_Chunk_PartsWithInlineData;
 
+    // Additional chunk parsing tests
+    [Test]
+    procedure Parse_Chunk_CreateTimeISO8601;
+    [Test]
+    procedure Parse_Chunk_ThoughtSignatures;
+    [Test]
+    procedure Parse_Chunk_InlineImageEmptyData_NoResource;
+    [Test]
+    procedure Parse_Chunk_InvalidCreateTime_SetsZero;
+
     // Error handling tests
     [Test]
     procedure Parse_MalformedJson_RaisesError;
@@ -261,6 +271,45 @@ begin
   Assert.AreEqual<Integer>(1, FChunks[0].Parts.Count);
   Assert.IsNotNull(FChunks[0].Parts[0].InlineData);
   Assert.AreEqual('image/png', FChunks[0].Parts[0].InlineData.MimeType);
+end;
+
+procedure TTestGeminiFileParser.Parse_Chunk_CreateTimeISO8601;
+begin
+  ParseJson('{"chunkedPrompt":{"chunks":[' +
+    '{"role":"user","text":"Hi","createTime":"2025-06-15T10:30:00Z"}]}}');
+
+  Assert.AreEqual<Integer>(1, FChunks.Count);
+  Assert.IsTrue(FChunks[0].CreateTime > 0, 'CreateTime should be parsed');
+end;
+
+procedure TTestGeminiFileParser.Parse_Chunk_ThoughtSignatures;
+begin
+  ParseJson('{"chunkedPrompt":{"chunks":[' +
+    '{"role":"model","text":"Done","thoughtSignatures":["sig1","sig2"]}]}}');
+
+  Assert.AreEqual<Integer>(1, FChunks.Count);
+  Assert.AreEqual<Integer>(2, Length(FChunks[0].ThoughtSignatures));
+  Assert.AreEqual('sig1', FChunks[0].ThoughtSignatures[0]);
+  Assert.AreEqual('sig2', FChunks[0].ThoughtSignatures[1]);
+end;
+
+procedure TTestGeminiFileParser.Parse_Chunk_InlineImageEmptyData_NoResource;
+begin
+  ParseJson('{"chunkedPrompt":{"chunks":[' +
+    '{"role":"model","inlineImage":{"mimeType":"image/jpeg","data":""}}]}}');
+
+  Assert.AreEqual<Integer>(1, FChunks.Count);
+  Assert.IsNull(FChunks[0].InlineImage, 'InlineImage should be nil when data is empty');
+end;
+
+procedure TTestGeminiFileParser.Parse_Chunk_InvalidCreateTime_SetsZero;
+begin
+  ParseJson('{"chunkedPrompt":{"chunks":[' +
+    '{"role":"user","text":"Hi","createTime":"not-a-date"}]}}');
+
+  Assert.AreEqual<Integer>(1, FChunks.Count);
+  Assert.AreEqual(Double(0), Double(FChunks[0].CreateTime), 0.001,
+    'Invalid createTime should result in 0');
 end;
 
 procedure TTestGeminiFileParser.Parse_MalformedJson_RaisesError;

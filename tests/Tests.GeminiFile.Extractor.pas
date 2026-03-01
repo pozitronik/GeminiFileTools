@@ -40,6 +40,10 @@ type
     procedure ExtractAll_SequentialMode_Works;
     [Test]
     procedure ExtractAll_ThreadedMode_SameResults;
+    [Test]
+    procedure ExtractAll_SequentialMode_ProgressCallback;
+    [Test]
+    procedure ExtractAll_ThreadedMode_ProgressCallback;
   end;
 
 implementation
@@ -179,6 +183,54 @@ begin
     // Verify content of first file
     LBytes := TFile.ReadAllBytes(TPath.Combine(FTempDir, 'par_000.txt'));
     Assert.AreEqual<Integer>(5, Length(LBytes));
+  finally
+    LRes1.Free;
+    LRes2.Free;
+    LRes3.Free;
+  end;
+end;
+
+procedure TTestGeminiExtractor.ExtractAll_SequentialMode_ProgressCallback;
+var
+  LResources: TArray<TGeminiResource>;
+  LRes1, LRes2: TGeminiResource;
+  LProgressCount: Integer;
+begin
+  LProgressCount := 0;
+  LRes1 := MakeResource('text/plain', 'SGVsbG8=', 0);
+  LRes2 := MakeResource('text/plain', 'V29ybGQ=', 1);
+  try
+    LResources := TArray<TGeminiResource>.Create(LRes1, LRes2);
+    FExtractor.ExtractAll(LResources, FTempDir, False, 'prog',
+      procedure(AIndex, ATotal: Integer; const AFileName: string)
+      begin
+        Inc(LProgressCount);
+      end);
+    Assert.AreEqual<Integer>(2, LProgressCount, 'Progress should be called for each resource');
+  finally
+    LRes1.Free;
+    LRes2.Free;
+  end;
+end;
+
+procedure TTestGeminiExtractor.ExtractAll_ThreadedMode_ProgressCallback;
+var
+  LResources: TArray<TGeminiResource>;
+  LRes1, LRes2, LRes3: TGeminiResource;
+  LProgressCount: Integer;
+begin
+  LProgressCount := 0;
+  LRes1 := MakeResource('text/plain', 'SGVsbG8=', 0);
+  LRes2 := MakeResource('text/plain', 'V29ybGQ=', 1);
+  LRes3 := MakeResource('text/plain', 'AQID', 2);
+  try
+    LResources := TArray<TGeminiResource>.Create(LRes1, LRes2, LRes3);
+    FExtractor.ExtractAll(LResources, FTempDir, True, 'tprog',
+      procedure(AIndex, ATotal: Integer; const AFileName: string)
+      begin
+        AtomicIncrement(LProgressCount);
+      end);
+    Assert.AreEqual<Integer>(3, LProgressCount, 'Progress should be called for each resource');
   finally
     LRes1.Free;
     LRes2.Free;

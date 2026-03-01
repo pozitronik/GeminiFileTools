@@ -10,11 +10,15 @@ interface
 uses
   System.SysUtils,
   System.Types,
+  System.Classes,
   System.IOUtils,
   System.Math,
+  System.Generics.Collections,
   DUnitX.TestFramework,
   GeminiFile.Types,
   GeminiFile.Model,
+  GeminiFile.Parser,
+  GeminiFile.Extractor,
   GeminiFile;
 
 type
@@ -47,6 +51,12 @@ type
     procedure Tigritsa_ResourceCount;
     [Test]
     procedure Tigritsa_RunSettings;
+
+    // Facade tests
+    [Test]
+    procedure LoadFromFile_NotFound_RaisesException;
+    [Test]
+    procedure Create_WithCustomParserAndExtractor;
   end;
 
 implementation
@@ -55,10 +65,15 @@ implementation
 
 function TTestGeminiFileIntegration.ExamplesDir: string;
 begin
-  // Navigate from test exe directory up to project root, then into examples
+  // Navigate from tests/Win64/Debug/ up to project root, then into examples
+  // Full path: <root>/tests/Win64/Debug/GemViewTests.exe
+  // GetDirectoryName x1: <root>/tests/Win64/Debug
+  // GetDirectoryName x2: <root>/tests/Win64
+  // GetDirectoryName x3: <root>/tests
+  // GetDirectoryName x4: <root>
   Result := TPath.Combine(
     TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
-      TPath.GetFullPath(ParamStr(0))))),
+      TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
     'examples');
   // Fallback: try relative path from working directory
   if not TDirectory.Exists(Result) then
@@ -257,6 +272,46 @@ begin
   try
     LFile.LoadFromFile(LPath);
     Assert.AreEqual('models/gemini-2.5-flash-image-preview', LFile.RunSettings.Model);
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromFile_NotFound_RaisesException;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LFile: TGeminiFile;
+    begin
+      LFile := TGeminiFile.Create;
+      try
+        LFile.LoadFromFile('nonexistent_file_that_does_not_exist');
+      finally
+        LFile.Free;
+      end;
+    end,
+    EFileNotFoundException, '');
+end;
+
+procedure TTestGeminiFileIntegration.Create_WithCustomParserAndExtractor;
+var
+  LFile: TGeminiFile;
+  LParser: IGeminiFileParser;
+  LExtractor: IGeminiResourceExtractor;
+  LStream: TStringStream;
+begin
+  LParser := TGeminiFileParser.Create;
+  LExtractor := TGeminiResourceExtractor.Create;
+  LFile := TGeminiFile.Create(LParser, LExtractor);
+  try
+    LStream := TStringStream.Create('{"chunkedPrompt":{"chunks":[]}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual<Integer>(0, LFile.ChunkCount);
   finally
     LFile.Free;
   end;

@@ -194,8 +194,6 @@ begin
     on E: Exception do
       raise EGeminiParseError.Create('Failed to parse JSON: ' + E.Message);
   end;
-  if LRoot = nil then
-    raise EGeminiParseError.Create('Failed to parse JSON: root value is nil');
   try
     if not (LRoot is TJSONObject) then
       raise EGeminiParseError.Create('Invalid Gemini file: root is not a JSON object');

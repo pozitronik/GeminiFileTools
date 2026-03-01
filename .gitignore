@@ -12,3 +12,6 @@
 *.res
 *.rsm
 *.md
+*.drc
+*.map
+*.xml
