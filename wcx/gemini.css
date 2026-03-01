@@ -1,0 +1,96 @@
+/*
+ * Gemini WCX Plugin -- Custom CSS Overrides
+ * Place this file next to gemini.wcx / gemini.wcx64
+ * These styles are appended after the built-in styles, so they take
+ * precedence. Use browser DevTools on an exported HTML to inspect
+ * class names and structure.
+ *
+ * Built-in selectors you can override:
+ *
+ *   body                     -- page container (max-width, background, font)
+ *   body.full-width          -- active when full-width mode is on
+ *   body.md                  -- active when Markdown rendering is on
+ *   h1                       -- page title
+ *   .meta                    -- model/settings metadata line
+ *   .section-title           -- "System Instruction" / "Conversation" headings
+ *   .system-instruction      -- system instruction block
+ *   .message                 -- each conversation turn container
+ *   .message.user            -- user message
+ *   .message.model           -- model message
+ *   .role                    -- role label (USER / MODEL)
+ *   .tokens                  -- token count badge
+ *   .time                    -- timestamp badge
+ *   .content                 -- message text container
+ *   details.thinking         -- collapsible thinking block
+ *   summary                  -- thinking block toggle label
+ *   .resource-img            -- embedded/linked image
+ *   .resource-info           -- image metadata caption
+ *   .remote-attachments      -- remote attachment hint
+ *   #controls                -- floating controls panel
+ *   #controls button         -- control panel buttons
+ *
+ *   body.md .content         -- content when Markdown is rendered
+ *   body.md .content p       -- paragraphs in rendered Markdown
+ *   body.md .content pre     -- fenced code blocks
+ *   body.md .content code    -- inline code spans
+ *
+ * Examples below -- uncomment to use:
+ */
+
+/* Dark theme */
+/*
+body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+.message.user {
+    background: #16213e;
+    border-left-color: #4a9eff;
+}
+.message.model {
+    background: #1a1a2e;
+    border-left-color: #4caf50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.user .role { color: #4a9eff; }
+.model .role { color: #4caf50; }
+.system-instruction {
+    background: #2a2a1e;
+    border-left-color: #ffc107;
+    color: #e0e0e0;
+}
+details.thinking {
+    background: #2a2a3e;
+}
+body.md .content code {
+    background: #2a2a3e;
+    color: #e0e0e0;
+}
+#controls {
+    background: #16213e;
+    border-color: #333;
+}
+#controls button {
+    background: #2a2a3e;
+    border-color: #444;
+    color: #e0e0e0;
+}
+#controls button:hover {
+    background: #3a3a4e;
+}
+*/
+
+/* Wider column */
+/*
+body { max-width: 1200px; }
+*/
+
+/* Larger font */
+/*
+body { font-size: 18px; }
+*/
+
+/* Hide controls panel */
+/*
+#controls { display: none; }
+*/
