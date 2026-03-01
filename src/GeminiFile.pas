@@ -64,12 +64,15 @@ type
 			const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
 	public
 		/// <summary>
-		///   Creates a TGeminiFile with optional injected parser and extractor.
-		///   If not provided, uses default implementations (DIP).
+		///   Creates a TGeminiFile with default parser and extractor implementations.
 		/// </summary>
-		/// <param name="AParser">Optional parser implementation. Defaults to TGeminiFileParser.</param>
-		/// <param name="AExtractor">Optional extractor implementation. Defaults to TGeminiResourceExtractor.</param>
-		constructor Create(AParser: IGeminiFileParser = nil; AExtractor: IGeminiResourceExtractor = nil);
+		constructor Create; overload;
+		/// <summary>
+		///   Creates a TGeminiFile with injected parser and extractor (DIP).
+		/// </summary>
+		/// <param name="AParser">Parser implementation to use.</param>
+		/// <param name="AExtractor">Extractor implementation to use.</param>
+		constructor Create(const AParser: IGeminiFileParser; const AExtractor: IGeminiResourceExtractor); overload;
 		destructor Destroy; override;
 
 		/// <summary>
@@ -130,21 +133,18 @@ implementation
 
 {TGeminiFile}
 
-constructor TGeminiFile.Create(AParser: IGeminiFileParser; AExtractor: IGeminiResourceExtractor);
+constructor TGeminiFile.Create;
+begin
+	Create(TGeminiFileParser.Create, TGeminiResourceExtractor.Create);
+end;
+
+constructor TGeminiFile.Create(const AParser: IGeminiFileParser; const AExtractor: IGeminiResourceExtractor);
 begin
 	inherited Create;
 	FRunSettings := GeminiFile.Model.TGeminiRunSettings.Create;
 	FChunks := TObjectList<GeminiFile.Model.TGeminiChunk>.Create(True);
-
-	if AParser <> nil then
-		FParser := AParser
-	else
-		FParser := TGeminiFileParser.Create;
-
-	if AExtractor <> nil then
-		FExtractor := AExtractor
-	else
-		FExtractor := TGeminiResourceExtractor.Create;
+	FParser := AParser;
+	FExtractor := AExtractor;
 end;
 
 destructor TGeminiFile.Destroy;
@@ -252,27 +252,15 @@ function TGeminiFile.GetResources: TArray<GeminiFile.Model.TGeminiResource>;
 var
 	LList: TList<GeminiFile.Model.TGeminiResource>;
 	LChunk: GeminiFile.Model.TGeminiChunk;
-	LPart: GeminiFile.Model.TGeminiPart;
+	LRes: GeminiFile.Model.TGeminiResource;
 begin
 	LList := TList<GeminiFile.Model.TGeminiResource>.Create;
 	try
 		for LChunk in FChunks do
 		begin
-			// Primary: chunk-level InlineImage
-			if LChunk.InlineImage <> nil then
-			begin
-				LList.Add(LChunk.InlineImage);
-				Continue; // Skip parts -- they contain the same data
-			end;
-			// Fallback: scan parts for InlineData
-			for LPart in LChunk.Parts do
-			begin
-				if LPart.InlineData <> nil then
-				begin
-					LList.Add(LPart.InlineData);
-					Break; // One resource per chunk is sufficient for deduplication
-				end;
-			end;
+			LRes := LChunk.GetResource;
+			if LRes <> nil then
+				LList.Add(LRes);
 		end;
 		Result := LList.ToArray;
 	finally
@@ -283,27 +271,11 @@ end;
 function TGeminiFile.GetResourceCount: Integer;
 var
 	LChunk: GeminiFile.Model.TGeminiChunk;
-	LPart: GeminiFile.Model.TGeminiPart;
-	LFound: Boolean;
 begin
 	Result := 0;
 	for LChunk in FChunks do
-	begin
-		if LChunk.InlineImage <> nil then
-		begin
+		if LChunk.HasResource then
 			Inc(Result);
-			Continue;
-		end;
-		LFound := False;
-		for LPart in LChunk.Parts do
-			if LPart.InlineData <> nil then
-			begin
-				LFound := True;
-				Break;
-			end;
-		if LFound then
-			Inc(Result);
-	end;
 end;
 
 function TGeminiFile.ExtractAllResources(const AOutputDir: string; AThreaded: Boolean; const ANamePrefix: string): Integer;
