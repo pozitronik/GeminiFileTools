@@ -133,6 +133,10 @@ type
 		procedure CreateTime_DisplayedInRoleDiv;
 		[Test]
 		procedure CustomCSS_EmbeddedInStyleBlock;
+		[Test]
+		procedure ControlsPanel_PresentInOutput;
+		[Test]
+		procedure ThinkingBlocks_HaveThinkingClass;
 	end;
 
 implementation
@@ -610,7 +614,7 @@ var
 begin
 	FChunks.Add(MakeChunk(grModel, 'Processing...', 0, True));
 	LResult := FormatToString(False, '', nil);
-	Assert.Contains(LResult, '<details>');
+	Assert.Contains(LResult, '<details class="thinking">');
 	Assert.Contains(LResult, '<summary>Thinking</summary>');
 	Assert.Contains(LResult, 'Processing...');
 	Assert.Contains(LResult, '</details>');
@@ -691,6 +695,26 @@ begin
 	Assert.Contains(LResult, '<style>');
 	Assert.Contains(LResult, '.custom-rule { color: red; }');
 	Assert.Contains(LResult, '</style>');
+end;
+
+procedure TTestGeminiHtmlFormatter.ControlsPanel_PresentInOutput;
+var
+	LResult: string;
+begin
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, 'id="controls"');
+	Assert.Contains(LResult, 'toggleWidth');
+	Assert.Contains(LResult, 'setDetails');
+	Assert.Contains(LResult, 'setThinking');
+end;
+
+procedure TTestGeminiHtmlFormatter.ThinkingBlocks_HaveThinkingClass;
+var
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Reasoning...', 0, True));
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, '<details class="thinking">');
 end;
 
 initialization

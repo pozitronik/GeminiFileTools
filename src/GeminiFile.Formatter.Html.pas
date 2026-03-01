@@ -98,7 +98,14 @@ const
 		'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
 		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF +
 		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF +
-		'.time { color: #999; font-weight: normal; font-size: 0.85em; }';
+		'.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
+		'body.full-width { max-width: none; }' + CRLF +
+		'#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' +
+		' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' +
+		' display: flex; gap: 6px; flex-wrap: wrap; max-width: 220px; }' + CRLF +
+		'#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' +
+		' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' + CRLF +
+		'#controls button:hover { background: #e0e0e0; }';
 
 { TGeminiHtmlFormatter }
 
@@ -178,7 +185,7 @@ begin
 			LText := LChunk.GetThinkingText;
 			if LText = '' then
 				LText := LChunk.Text;
-			StreamWriteLn(AOutput, '<details>');
+			StreamWriteLn(AOutput, '<details class="thinking">');
 			LSummary := 'Thinking';
 			if (LChunk.CreateTime > 0) and FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
 				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LChunk.CreateTime)) + ', with attachment)'
@@ -238,7 +245,7 @@ begin
 			LThinking := LChunk.GetThinkingText;
 			if LThinking <> '' then
 			begin
-				StreamWriteLn(AOutput, '<details>');
+				StreamWriteLn(AOutput, '<details class="thinking">');
 				StreamWriteLn(AOutput, '<summary>Thinking</summary>');
 				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LThinking) + '</div>');
 				StreamWriteLn(AOutput, '</details>');
@@ -274,6 +281,29 @@ begin
 			StreamWriteLn(AOutput, '</div>');
 		end;
 	end;
+
+	// Controls panel
+	StreamWriteLn(AOutput, '<div id="controls">');
+	StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Full width</button>');
+	StreamWriteLn(AOutput, '<button onclick="setDetails(true)">Expand all</button>');
+	StreamWriteLn(AOutput, '<button onclick="setDetails(false)">Collapse all</button>');
+	StreamWriteLn(AOutput, '<button onclick="setThinking(true)">Expand thinking</button>');
+	StreamWriteLn(AOutput, '<button onclick="setThinking(false)">Collapse thinking</button>');
+	StreamWriteLn(AOutput, '</div>');
+
+	// JavaScript
+	StreamWriteLn(AOutput, '<script>');
+	StreamWriteLn(AOutput, 'function toggleWidth(btn) {');
+	StreamWriteLn(AOutput, '  document.body.classList.toggle("full-width");');
+	StreamWriteLn(AOutput, '  btn.textContent = document.body.classList.contains("full-width") ? "Column width" : "Full width";');
+	StreamWriteLn(AOutput, '}');
+	StreamWriteLn(AOutput, 'function setDetails(open) {');
+	StreamWriteLn(AOutput, '  document.querySelectorAll("details").forEach(function(d) { d.open = open; });');
+	StreamWriteLn(AOutput, '}');
+	StreamWriteLn(AOutput, 'function setThinking(open) {');
+	StreamWriteLn(AOutput, '  document.querySelectorAll("details.thinking").forEach(function(d) { d.open = open; });');
+	StreamWriteLn(AOutput, '}');
+	StreamWriteLn(AOutput, '</script>');
 
 	// HTML footer
 	StreamWriteLn(AOutput, '</body>');
