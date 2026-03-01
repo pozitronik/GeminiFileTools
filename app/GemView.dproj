@@ -83,6 +83,7 @@
         <DCCReference Include="..\src\GeminiFile.Model.pas"/>
         <DCCReference Include="..\src\GeminiFile.Parser.pas"/>
         <DCCReference Include="..\src\GeminiFile.Extractor.pas"/>
+        <DCCReference Include="..\src\GeminiFile.LazyData.pas"/>
         <DCCReference Include="..\src\GeminiFile.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

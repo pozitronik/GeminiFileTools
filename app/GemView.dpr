@@ -28,6 +28,7 @@ uses
 	GeminiFile.Model in '..\src\GeminiFile.Model.pas',
 	GeminiFile.Parser in '..\src\GeminiFile.Parser.pas',
 	GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
+	GeminiFile.LazyData in '..\src\GeminiFile.LazyData.pas',
 	GeminiFile in '..\src\GeminiFile.pas';
 
 const

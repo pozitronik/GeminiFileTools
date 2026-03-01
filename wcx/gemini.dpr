@@ -19,6 +19,7 @@ uses
 	GeminiFile.Model in '..\src\GeminiFile.Model.pas',
 	GeminiFile.Parser in '..\src\GeminiFile.Parser.pas',
 	GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
+	GeminiFile.LazyData in '..\src\GeminiFile.LazyData.pas',
 	GeminiFile in '..\src\GeminiFile.pas',
 	GeminiFile.Formatter.Utils in '..\src\GeminiFile.Formatter.Utils.pas',
 	GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',

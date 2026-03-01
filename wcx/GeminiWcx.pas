@@ -343,7 +343,7 @@ begin
 		FResourceInfos[I].FileName := Format(LSubDir + 'resource_%.*d%s',
 			[LPadWidth, I, FResources[I].GetFileExtension]);
 		FResourceInfos[I].MimeType := FResources[I].MimeType;
-		FResourceInfos[I].Base64Data := FResources[I].Base64Data;
+		FResourceInfos[I].Base64Data := ''; // deferred: loaded on demand for embedded HTML
 		FResourceInfos[I].DecodedSize := FResources[I].DecodedSize;
 		FResourceInfos[I].ChunkIndex := FResources[I].ChunkIndex;
 	end;
@@ -434,8 +434,9 @@ var
 	I: Integer;
 begin
 	Result := Length(FCachedHtml);
+	// Estimate base64 size from decoded size (base64 expands by ~4/3)
 	for I := 0 to High(FResourceInfos) do
-		Inc(Result, Length(FResourceInfos[I].Base64Data) + 100);
+		Inc(Result, (FResourceInfos[I].DecodedSize * 4) div 3 + 100);
 end;
 
 procedure TGeminiArchive.BuildVirtualFileList;
@@ -608,6 +609,7 @@ var
 	LDir: string;
 	LStream: TMemoryStream;
 	LFormatter: TGeminiHtmlFormatter;
+	I: Integer;
 begin
 	// Ensure destination directory exists
 	LDir := TPath.GetDirectoryName(ADestPath);
@@ -626,6 +628,10 @@ begin
 
 		vfConversationHtmlEmbedded:
 		begin
+			// Load base64 data on demand for embedding
+			for I := 0 to High(FResourceInfos) do
+				FResourceInfos[I].Base64Data := FResources[I].Base64Data; // triggers lazy load
+
 			// Generate on-demand (can be large)
 			LStream := TMemoryStream.Create;
 			try
@@ -647,6 +653,12 @@ begin
 			finally
 				LStream.Free;
 			end;
+
+			// Release base64 data to free memory
+			for I := 0 to High(FResourceInfos) do
+				FResourceInfos[I].Base64Data := '';
+			for I := 0 to High(FResources) do
+				FResources[I].ReleaseBase64;
 		end;
 
 		vfResourceDir:

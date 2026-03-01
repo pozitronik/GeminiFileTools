@@ -13,7 +13,8 @@ uses
 	System.Math,
 	System.NetEncoding,
 	System.Generics.Collections,
-	GeminiFile.Types;
+	GeminiFile.Types,
+	GeminiFile.LazyData;
 
 type
 	/// <summary>
@@ -27,14 +28,33 @@ type
 		FDecodedData: TBytes;
 		FIsDecoded: Boolean;
 		FChunkIndex: Integer;
+		// Lazy loading support
+		FIsLazy: Boolean;
+		FSourceFilePath: string;
+		FLazyLocation: TBase64Location;
 		function GetDecodedSize: Int64;
 		function GetBase64Size: Int64;
+		function GetBase64Data: string;
+		/// <summary>Loads base64 from source file if lazy and not yet loaded.</summary>
+		procedure EnsureBase64Loaded;
 	public
 		/// <summary>Creates a resource from mime type and base64-encoded data string.</summary>
 		/// <param name="AMimeType">MIME type, e.g. 'image/jpeg'.</param>
 		/// <param name="ABase64Data">Raw base64-encoded string.</param>
 		/// <param name="AChunkIndex">Index of the parent chunk in the conversation.</param>
 		constructor Create(const AMimeType, ABase64Data: string; AChunkIndex: Integer);
+
+		/// <summary>
+		///   Creates a lazy resource that loads base64 data on demand from the source file.
+		///   No file I/O occurs at construction time.
+		/// </summary>
+		/// <param name="AMimeType">MIME type, e.g. 'image/jpeg'.</param>
+		/// <param name="AChunkIndex">Index of the parent chunk in the conversation.</param>
+		/// <param name="ASourceFilePath">Path to the original Gemini file.</param>
+		/// <param name="ALocation">Byte offset and length of base64 content in the file.</param>
+		constructor CreateLazy(const AMimeType: string; AChunkIndex: Integer;
+			const ASourceFilePath: string; const ALocation: TBase64Location);
+
 		destructor Destroy; override;
 
 		/// <summary>
@@ -65,6 +85,13 @@ type
 		/// <returns>File extension string, e.g. '.jpg', '.png'.</returns>
 		function GetFileExtension: string;
 
+		/// <summary>
+		///   Returns the lazy placeholder index if the internal base64 field
+		///   holds a "__LAZY:N" placeholder, or -1 otherwise.
+		///   Does NOT trigger a lazy load from file.
+		/// </summary>
+		function GetLazyPlaceholderIndex: Integer;
+
 		/// <summary>Releases the raw base64 string to free memory. Decoded data is kept.</summary>
 		procedure ReleaseBase64;
 
@@ -79,10 +106,14 @@ type
 		property DecodedSize: Int64 read GetDecodedSize;
 		/// <summary>Raw base64 string size in characters.</summary>
 		property Base64Size: Int64 read GetBase64Size;
-		/// <summary>Raw base64-encoded data string. Empty if already decoded and released.</summary>
-		property Base64Data: string read FBase64Data;
+		/// <summary>Raw base64-encoded data string. Triggers lazy load if needed.</summary>
+		property Base64Data: string read GetBase64Data;
 		/// <summary>Index of the parent chunk in the conversation.</summary>
 		property ChunkIndex: Integer read FChunkIndex;
+		/// <summary>True if this resource was created with lazy loading.</summary>
+		property IsLazy: Boolean read FIsLazy;
+		/// <summary>Path to the source file for lazy loading. Empty for non-lazy resources.</summary>
+		property SourceFilePath: string read FSourceFilePath;
 	end;
 
 	/// <summary>
@@ -249,6 +280,19 @@ begin
 	FBase64Data := ABase64Data;
 	FIsDecoded := False;
 	FChunkIndex := AChunkIndex;
+	FIsLazy := False;
+end;
+
+constructor TGeminiResource.CreateLazy(const AMimeType: string; AChunkIndex: Integer;
+	const ASourceFilePath: string; const ALocation: TBase64Location);
+begin
+	inherited Create;
+	FMimeType := AMimeType;
+	FChunkIndex := AChunkIndex;
+	FIsDecoded := False;
+	FIsLazy := True;
+	FSourceFilePath := ASourceFilePath;
+	FLazyLocation := ALocation;
 end;
 
 destructor TGeminiResource.Destroy;
@@ -257,10 +301,23 @@ begin
 	inherited;
 end;
 
+procedure TGeminiResource.EnsureBase64Loaded;
+begin
+	if FIsLazy and (FBase64Data = '') and (not FIsDecoded) then
+		FBase64Data := LoadBase64FromFile(FSourceFilePath, FLazyLocation);
+end;
+
+function TGeminiResource.GetBase64Data: string;
+begin
+	EnsureBase64Loaded;
+	Result := FBase64Data;
+end;
+
 procedure TGeminiResource.Decode;
 begin
 	if FIsDecoded then
 		Exit;
+	EnsureBase64Loaded;
 	if FBase64Data = '' then
 		raise EGeminiParseError.Create('Cannot decode resource: base64 data is empty or already released');
 	FDecodedData := TNetEncoding.Base64.DecodeStringToBytes(FBase64Data);
@@ -303,13 +360,30 @@ begin
 	else if FBase64Data <> '' then
 		// Base64 expands data by ~4/3, so decoded size is roughly 3/4 of base64 length
 		Result := (Length(FBase64Data) * 3) div 4
+	else if FIsLazy then
+		// Estimate from byte length without loading the data
+		Result := (FLazyLocation.ByteLength * 3) div 4
 	else
 		Result := 0;
 end;
 
 function TGeminiResource.GetBase64Size: Int64;
 begin
-	Result := Length(FBase64Data);
+	if (FBase64Data = '') and FIsLazy and (not FIsDecoded) then
+		// Report from byte length without triggering a load
+		Result := FLazyLocation.ByteLength
+	else
+		Result := Length(FBase64Data);
+end;
+
+function TGeminiResource.GetLazyPlaceholderIndex: Integer;
+const
+	LAZY_PREFIX = '__LAZY:';
+begin
+	if FBase64Data.StartsWith(LAZY_PREFIX) then
+		Result := StrToIntDef(Copy(FBase64Data, Length(LAZY_PREFIX) + 1, MaxInt), -1)
+	else
+		Result := -1;
 end;
 
 procedure TGeminiResource.ReleaseBase64;

@@ -19,7 +19,8 @@ uses
 	GeminiFile.Types,
 	GeminiFile.Model,
 	GeminiFile.Parser,
-	GeminiFile.Extractor;
+	GeminiFile.Extractor,
+	GeminiFile.LazyData;
 
 type
 	// Re-export types from sub-units for backward compatibility
@@ -50,6 +51,17 @@ type
 		FOnExtractProgress: GeminiFile.Types.TGeminiExtractProgressEvent;
 		FParser: IGeminiFileParser;
 		FExtractor: IGeminiResourceExtractor;
+		FFilePath: string;
+		/// <summary>
+		///   Walks all chunks/parts, replacing placeholder resources with lazy variants.
+		/// </summary>
+		procedure LinkLazyResources(const ALocations: TArray<TBase64Location>);
+		/// <summary>
+		///   Checks if a resource holds a __LAZY:N placeholder and returns a lazy replacement.
+		///   Returns nil if the resource is not a placeholder.
+		/// </summary>
+		function ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource;
+			const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
 	public
 		/// <summary>
 		///   Creates a TGeminiFile with optional injected parser and extractor.
@@ -144,21 +156,96 @@ end;
 
 procedure TGeminiFile.LoadFromFile(const AFileName: string);
 var
-	LStream: TFileStream;
+	LFileStream: TFileStream;
+	LBytes: TBytes;
+	LScanResult: TPreScanResult;
+	LStrippedStream: TStringStream;
 begin
 	if not FileExists(AFileName) then
 		raise EFileNotFoundException.CreateFmt('File not found: %s', [AFileName]);
-	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+	FFilePath := AFileName;
+
+	// Read raw bytes
+	LFileStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
 	try
-		LoadFromStream(LStream);
+		SetLength(LBytes, LFileStream.Size);
+		if LFileStream.Size > 0 then
+			LFileStream.ReadBuffer(LBytes[0], LFileStream.Size);
 	finally
-		LStream.Free;
+		LFileStream.Free;
 	end;
+
+	// Pre-scan: strip large base64 values, record their byte locations
+	LScanResult := PreScanGeminiFile(LBytes);
+	SetLength(LBytes, 0); // free raw bytes early
+
+	// Parse the stripped JSON (fast -- typically just a few hundred KB)
+	LStrippedStream := TStringStream.Create(LScanResult.StrippedJson, TEncoding.UTF8);
+	try
+		FSystemInstruction := FParser.Parse(LStrippedStream, FRunSettings, FChunks);
+	finally
+		LStrippedStream.Free;
+	end;
+
+	// Post-process: convert placeholder resources to lazy-loading variants
+	if Length(LScanResult.Locations) > 0 then
+		LinkLazyResources(LScanResult.Locations);
 end;
 
 procedure TGeminiFile.LoadFromStream(AStream: TStream);
 begin
+	FFilePath := '';
 	FSystemInstruction := FParser.Parse(AStream, FRunSettings, FChunks);
+end;
+
+function TGeminiFile.ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource;
+	const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
+var
+	LIndex: Integer;
+begin
+	Result := nil;
+	LIndex := AResource.GetLazyPlaceholderIndex;
+	if (LIndex < 0) or (LIndex > High(ALocations)) then
+		Exit;
+
+	Result := GeminiFile.Model.TGeminiResource.CreateLazy(
+		AResource.MimeType, AResource.ChunkIndex,
+		FFilePath, ALocations[LIndex]);
+end;
+
+procedure TGeminiFile.LinkLazyResources(const ALocations: TArray<TBase64Location>);
+var
+	LChunk: GeminiFile.Model.TGeminiChunk;
+	LPart: GeminiFile.Model.TGeminiPart;
+	LLazy: GeminiFile.Model.TGeminiResource;
+begin
+	for LChunk in FChunks do
+	begin
+		// Check chunk-level InlineImage
+		if LChunk.InlineImage <> nil then
+		begin
+			LLazy := ConvertToLazyIfNeeded(LChunk.InlineImage, ALocations);
+			if LLazy <> nil then
+			begin
+				LChunk.InlineImage.Free;
+				LChunk.InlineImage := LLazy;
+			end;
+		end;
+
+		// Check parts
+		for LPart in LChunk.Parts do
+		begin
+			if LPart.InlineData <> nil then
+			begin
+				LLazy := ConvertToLazyIfNeeded(LPart.InlineData, ALocations);
+				if LLazy <> nil then
+				begin
+					LPart.InlineData.Free;
+					LPart.InlineData := LLazy;
+				end;
+			end;
+		end;
+	end;
 end;
 
 function TGeminiFile.GetResources: TArray<GeminiFile.Model.TGeminiResource>;

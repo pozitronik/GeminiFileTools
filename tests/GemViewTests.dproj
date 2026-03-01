@@ -83,6 +83,7 @@
         <DCCReference Include="..\src\GeminiFile.Model.pas"/>
         <DCCReference Include="..\src\GeminiFile.Parser.pas"/>
         <DCCReference Include="..\src\GeminiFile.Extractor.pas"/>
+        <DCCReference Include="..\src\GeminiFile.LazyData.pas"/>
         <DCCReference Include="..\src\GeminiFile.pas"/>
         <DCCReference Include="..\src\GeminiFile.Formatter.Utils.pas"/>
         <DCCReference Include="..\src\GeminiFile.Formatter.Text.pas"/>
@@ -98,6 +99,7 @@
         <DCCReference Include="Tests.GeminiFile.Integration.pas"/>
         <DCCReference Include="Tests.GeminiFile.Formatter.pas"/>
         <DCCReference Include="Tests.GeminiWcx.pas"/>
+        <DCCReference Include="Tests.GeminiFile.LazyData.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
