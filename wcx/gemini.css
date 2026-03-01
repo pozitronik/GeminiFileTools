@@ -26,6 +26,7 @@
  *   .resource-img            -- embedded/linked image
  *   .resource-info           -- image metadata caption
  *   .remote-attachments      -- remote attachment hint
+ *   .combined-part           -- sub-block within a combined group
  *   #controls                -- floating controls panel
  *   #controls button         -- control panel buttons
  *

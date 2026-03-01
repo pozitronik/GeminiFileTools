@@ -108,6 +108,9 @@ type
 		DefaultFullWidth: Boolean;
 		DefaultExpandThinking: Boolean;
 		RenderMarkdown: Boolean;
+		CombineBlocksText: Boolean;
+		CombineBlocksMd: Boolean;
+		CombineBlocksHtml: Boolean;
 	end;
 
 /// <summary>
@@ -219,6 +222,12 @@ begin
 						LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', False);
 					GPluginConfig.RenderMarkdown :=
 						LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', True);
+					GPluginConfig.CombineBlocksText :=
+						LIni.ReadBool('Formatters', 'CombineBlocksText', False);
+					GPluginConfig.CombineBlocksMd :=
+						LIni.ReadBool('Formatters', 'CombineBlocksMd', False);
+					GPluginConfig.CombineBlocksHtml :=
+						LIni.ReadBool('Formatters', 'CombineBlocksHtml', False);
 				finally
 					LIni.Free;
 				end;
@@ -320,6 +329,7 @@ begin
 		LFormatter := TGeminiTextFormatter.Create;
 		try
 			LFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksText;
+			LFormatter.CombineBlocks := LConfig.CombineBlocksText;
 			LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -341,6 +351,7 @@ begin
 		LMdFormatter := TGeminiMarkdownFormatter.Create;
 		try
 			LMdFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksMd;
+			LMdFormatter.CombineBlocks := LConfig.CombineBlocksMd;
 			LMdFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -365,6 +376,7 @@ begin
 			LHtmlFormatter.DefaultFullWidth := LConfig.DefaultFullWidth;
 			LHtmlFormatter.DefaultExpandThinking := LConfig.DefaultExpandThinking;
 			LHtmlFormatter.RenderMarkdown := LConfig.RenderMarkdown;
+			LHtmlFormatter.CombineBlocks := LConfig.CombineBlocksHtml;
 			LHtmlFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -559,6 +571,7 @@ begin
 					LFormatter.DefaultFullWidth := GetPluginConfig.DefaultFullWidth;
 					LFormatter.DefaultExpandThinking := GetPluginConfig.DefaultExpandThinking;
 					LFormatter.RenderMarkdown := GetPluginConfig.RenderMarkdown;
+					LFormatter.CombineBlocks := GetPluginConfig.CombineBlocksHtml;
 					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
 						FResourceInfos);

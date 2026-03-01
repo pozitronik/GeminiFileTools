@@ -61,6 +61,16 @@ type
 		procedure EmptyUserChunk_SkippedWithRemoteHint;
 		[Test]
 		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
+		[Test]
+		procedure CombinedUserBlocks_SingleHeader;
+		[Test]
+		procedure CombinedBlocks_SeparatorBetween;
+		[Test]
+		procedure CombinedBlocks_SummedTokens;
+		[Test]
+		procedure CombinedBlocks_FirstTimestamp;
+		[Test]
+		procedure CombinedBlocks_ResourceInlinePosition;
 	end;
 
 	[TestFixture]
@@ -101,6 +111,12 @@ type
 		procedure EmptyUserChunk_SkippedWithRemoteHint;
 		[Test]
 		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
+		[Test]
+		procedure CombinedUserBlocks_SingleHeading;
+		[Test]
+		procedure CombinedBlocks_HrSeparator;
+		[Test]
+		procedure CombinedBlocks_TokensShown;
 	end;
 
 	[TestFixture]
@@ -157,6 +173,14 @@ type
 		procedure RenderMarkdown_AppliesConversion;
 		[Test]
 		procedure RenderMarkdownFalse_PreservesEscaping;
+		[Test]
+		procedure CombinedBlocks_SingleMessageDiv;
+		[Test]
+		procedure CombinedBlocks_CombinedPartDivs;
+		[Test]
+		procedure CombinedBlocks_CombinedPartCss;
+		[Test]
+		procedure CombinedThinkingBlocks_SingleDetails;
 	end;
 
 implementation
@@ -380,6 +404,82 @@ begin
 		'Empty blocks should not produce role headers');
 end;
 
+procedure TTestGeminiTextFormatter.CombinedUserBlocks_SingleHeader;
+var
+	LResult: string;
+	LPos, LSecond: Integer;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'First message'));
+	FChunks.Add(MakeChunk(grUser, 'Second message'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '[USER]');
+	Assert.Contains(LResult, 'First message');
+	Assert.Contains(LResult, 'Second message');
+	// Only one [USER] header
+	LPos := Pos('[USER]', LResult);
+	LSecond := Pos('[USER]', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one [USER] header');
+end;
+
+procedure TTestGeminiTextFormatter.CombinedBlocks_SeparatorBetween;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'First'));
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '- - -');
+end;
+
+procedure TTestGeminiTextFormatter.CombinedBlocks_SummedTokens;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grModel, 'A', 10));
+	FChunks.Add(MakeChunk(grModel, 'B', 20));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '(30 tokens)');
+end;
+
+procedure TTestGeminiTextFormatter.CombinedBlocks_FirstTimestamp;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	FFormatter.CombineBlocks := True;
+	LChunk := MakeChunk(grUser, 'First', 0);
+	LChunk.CreateTime := EncodeDate(2026, 3, 1) + EncodeTime(10, 30, 0, 0);
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '2026-03-01 10:30:00');
+end;
+
+procedure TTestGeminiTextFormatter.CombinedBlocks_ResourceInlinePosition;
+var
+	LResult: string;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'Text before image'));
+	FChunks.Add(MakeChunk(grUser, 'Text after image'));
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.jpg';
+	LRes[0].MimeType := 'image/jpeg';
+	LRes[0].DecodedSize := 1000;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString('', LRes);
+	// Resource should appear after first chunk's text, before separator
+	var LResPos := Pos('[Attached:', LResult);
+	var LSepPos := Pos('- - -', LResult);
+	Assert.IsTrue(LResPos > 0, 'Resource indicator should be present');
+	Assert.IsTrue(LSepPos > 0, 'Separator should be present');
+	Assert.IsTrue(LResPos < LSepPos, 'Resource should appear before separator');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -566,6 +666,50 @@ begin
 	FChunks.Add(LChunk);
 	LResult := FormatToString('', nil);
 	Assert.Contains(LResult, '*2 remote attachment(s)*');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CombinedUserBlocks_SingleHeading;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'First'));
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '### User');
+	Assert.Contains(LResult, 'First');
+	Assert.Contains(LResult, 'Second');
+	// Only one ### User heading
+	var LPos := Pos('### User', LResult);
+	var LSecond := Pos('### User', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one ### User heading');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CombinedBlocks_HrSeparator;
+var
+	LResult: string;
+	LPos: Integer;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'First'));
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LResult := FormatToString('', nil);
+	// Find --- that appears after the Conversation section separator
+	// The separator between sub-blocks should appear after the content starts
+	LPos := Pos('First', LResult);
+	Assert.IsTrue(Pos('---', LResult, LPos) > 0,
+		'Horizontal rule separator should appear between combined sub-blocks');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CombinedBlocks_TokensShown;
+var
+	LResult: string;
+begin
+	FFormatter.CombineBlocks := True;
+	FChunks.Add(MakeChunk(grModel, 'A', 15));
+	FChunks.Add(MakeChunk(grModel, 'B', 25));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '*(40 tokens)*');
 end;
 
 // ========================================================================
@@ -941,6 +1085,110 @@ begin
 	Assert.Contains(LResult, '**bold**');
 	Assert.IsFalse(LResult.Contains('<strong>'), 'Markdown should not be rendered when disabled');
 	Assert.IsFalse(LResult.Contains('class="md"'), 'md class should not be present when disabled');
+end;
+
+procedure TTestGeminiHtmlFormatter.CombinedBlocks_SingleMessageDiv;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grUser, 'First'));
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.CombineBlocks := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	// Should have exactly one message div for both user chunks
+	var LPos := Pos('class="message user"', LResult);
+	Assert.IsTrue(LPos > 0, 'Should have a message div');
+	var LSecond := Pos('class="message user"', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one message div');
+	Assert.Contains(LResult, 'First');
+	Assert.Contains(LResult, 'Second');
+end;
+
+procedure TTestGeminiHtmlFormatter.CombinedBlocks_CombinedPartDivs;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grUser, 'First'));
+	FChunks.Add(MakeChunk(grUser, 'Second'));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.CombineBlocks := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, 'class="combined-part"');
+end;
+
+procedure TTestGeminiHtmlFormatter.CombinedBlocks_CombinedPartCss;
+var
+	LResult: string;
+begin
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, '.combined-part');
+end;
+
+procedure TTestGeminiHtmlFormatter.CombinedThinkingBlocks_SingleDetails;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Think A', 0, True));
+	FChunks.Add(MakeChunk(grModel, 'Think B', 0, True));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.CombineBlocks := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	// Should have exactly one <details class="thinking">
+	var LPos := Pos('<details class="thinking">', LResult);
+	Assert.IsTrue(LPos > 0, 'Should have a thinking details element');
+	var LSecond := Pos('<details class="thinking">', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one thinking details element');
+	Assert.Contains(LResult, 'Think A');
+	Assert.Contains(LResult, 'Think B');
 end;
 
 initialization

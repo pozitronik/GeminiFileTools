@@ -23,7 +23,8 @@ uses
 	GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',
 	GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
 	GeminiFile.Formatter.Html in '..\src\GeminiFile.Formatter.Html.pas',
-	GeminiFile.Markdown in '..\src\GeminiFile.Markdown.pas';
+	GeminiFile.Markdown in '..\src\GeminiFile.Markdown.pas',
+	GeminiFile.Grouping in '..\src\GeminiFile.Grouping.pas';
 
 exports
 	// Unicode (primary)

@@ -1,7 +1,8 @@
 /// <summary>
 ///   Plain text formatter for Gemini conversations.
 ///   Produces readable text with role labels, token counts, thinking blocks,
-///   and resource indicators.
+///   and resource indicators. Supports optional block combining for
+///   consecutive same-kind chunks.
 /// </summary>
 unit GeminiFile.Formatter.Text;
 
@@ -22,10 +23,13 @@ type
 	TGeminiTextFormatter = class
 	private
 		FHideEmptyBlocks: Boolean;
+		FCombineBlocks: Boolean;
 	public
 		constructor Create;
 		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
 		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
+		/// <summary>When True, consecutive same-kind chunks are merged into a single visual block.</summary>
+		property CombineBlocks: Boolean read FCombineBlocks write FCombineBlocks;
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 text.
 		/// </summary>
@@ -44,6 +48,9 @@ type
 	end;
 
 implementation
+
+uses
+	GeminiFile.Grouping;
 
 const
 	CRLF = #13#10;
@@ -68,6 +75,7 @@ constructor TGeminiTextFormatter.Create;
 begin
 	inherited Create;
 	FHideEmptyBlocks := True;
+	FCombineBlocks := False;
 end;
 
 procedure TGeminiTextFormatter.FormatToStream(
@@ -77,12 +85,17 @@ procedure TGeminiTextFormatter.FormatToStream(
 	ARunSettings: TGeminiRunSettings;
 	const AResources: TArray<TFormatterResourceInfo>);
 var
+	LGroups: TArray<TChunkGroup>;
+	LGroup: TChunkGroup;
 	LChunk: TGeminiChunk;
 	LText, LThinking: string;
 	LResInfo: TFormatterResourceInfo;
 	LHasResource: Boolean;
 	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
+	I: Integer;
+	LFirstContent: Boolean;
+	LSubBlockIndex: Integer;
 begin
 	LFmt := TFormatSettings.Invariant;
 	LPendingRemoteCount := 0;
@@ -112,80 +125,112 @@ begin
 	StreamWriteLn(AOutput, '--- Conversation ---');
 	StreamWriteLn(AOutput);
 
-	// Chunks
-	for LChunk in AChunks do
+	// Build groups
+	LGroups := GroupConsecutiveChunks(AChunks, FCombineBlocks);
+
+	// Iterate groups
+	for I := 0 to High(LGroups) do
 	begin
-		if LChunk.IsThought then
+		LGroup := LGroups[I];
+		LFirstContent := True;
+
+		if LGroup.Kind = gkThinking then
 		begin
-			// Pure thinking chunk -- no role header
-			LText := LChunk.GetThinkingText;
-			if LText = '' then
-				LText := LChunk.Text;
-			if LChunk.CreateTime > 0 then
-				StreamWriteLn(AOutput, '<Thinking> ' + FormatCreateTime(LChunk.CreateTime))
+			// Thinking group -- one header, then each sub-block's content
+			if LGroup.FirstCreateTime > 0 then
+				StreamWriteLn(AOutput, '<Thinking> ' + FormatCreateTime(LGroup.FirstCreateTime))
 			else
 				StreamWriteLn(AOutput, '<Thinking>');
-			StreamWriteLn(AOutput, LText);
+			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
+			begin
+				LChunk := LGroup.Chunks[LSubBlockIndex];
+				// Sub-block separator
+				if LSubBlockIndex > 0 then
+					StreamWriteLn(AOutput, '- - -');
+				LText := LChunk.GetThinkingText;
+				if LText = '' then
+					LText := LChunk.Text;
+				StreamWriteLn(AOutput, LText);
+				// Resource indicator
+				if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+					StreamWriteLn(AOutput, '[Attached: ' + LResInfo.FileName +
+						' (' + LResInfo.MimeType + ', ~' + FormatByteSize(LResInfo.DecodedSize) + ')]');
+			end;
 			StreamWriteLn(AOutput, '</Thinking>');
-			// Resource indicator for thinking chunks with attachments
-			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
-				StreamWriteLn(AOutput, '[Attached: ' + LResInfo.FileName +
-					' (' + LResInfo.MimeType + ', ~' + FormatByteSize(LResInfo.DecodedSize) + ')]');
 		end
 		else
 		begin
-			// Pre-compute text and resource for empty block detection
-			LText := LChunk.GetFullText;
-			LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
+			// User/Model group -- lazy header emission for empty block handling
+			LFirstContent := True;
 
-			// Skip empty display blocks (no text, no embedded resource)
-			if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
+			for LSubBlockIndex := 0 to High(LGroup.Chunks) do
 			begin
-				if LChunk.DriveImageId <> '' then
-					Inc(LPendingRemoteCount);
-				Continue;
+				LChunk := LGroup.Chunks[LSubBlockIndex];
+
+				// Pre-compute text and resource for empty block detection
+				LText := LChunk.GetFullText;
+				LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
+
+				// Skip empty display blocks (no text, no embedded resource)
+				if FHideEmptyBlocks and (LText = '') and (not LHasResource) then
+				begin
+					if LChunk.DriveImageId <> '' then
+						Inc(LPendingRemoteCount);
+					Continue;
+				end;
+
+				// Emit pending remote attachment hint before first visible content
+				if LFirstContent and (LPendingRemoteCount > 0) then
+				begin
+					StreamWriteLn(AOutput, '[' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)]');
+					StreamWriteLn(AOutput);
+					LPendingRemoteCount := 0;
+				end;
+
+				// Emit role header lazily on first visible sub-block
+				if LFirstContent then
+				begin
+					case LGroup.Kind of
+						gkUser: StreamWrite(AOutput, '[USER]');
+						gkModel: StreamWrite(AOutput, '[MODEL]');
+					end;
+					if LGroup.FirstCreateTime > 0 then
+						StreamWrite(AOutput, ' ' + FormatCreateTime(LGroup.FirstCreateTime));
+					if LGroup.TotalTokenCount > 0 then
+						StreamWrite(AOutput, ' (' + IntToStr(LGroup.TotalTokenCount) + ' tokens)');
+					StreamWriteLn(AOutput);
+					LFirstContent := False;
+				end
+				else
+				begin
+					// Sub-block separator between visible sub-blocks
+					StreamWriteLn(AOutput, '- - -');
+				end;
+
+				// Part-level thinking (model chunks with mixed parts)
+				LThinking := LChunk.GetThinkingText;
+				if LThinking <> '' then
+				begin
+					StreamWriteLn(AOutput, '<Thinking>');
+					StreamWriteLn(AOutput, LThinking);
+					StreamWriteLn(AOutput, '</Thinking>');
+					StreamWriteLn(AOutput);
+				end;
+
+				// Main text
+				if LText <> '' then
+					StreamWriteLn(AOutput, LText);
+
+				// Resource indicator
+				if LHasResource then
+					StreamWriteLn(AOutput, '[Attached: ' + LResInfo.FileName +
+						' (' + LResInfo.MimeType + ', ~' + FormatByteSize(LResInfo.DecodedSize) + ')]');
 			end;
-
-			// Emit pending remote attachment hint
-			if LPendingRemoteCount > 0 then
-			begin
-				StreamWriteLn(AOutput, '[' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)]');
-				StreamWriteLn(AOutput);
-				LPendingRemoteCount := 0;
-			end;
-
-			// Role header
-			case LChunk.Role of
-				grUser: StreamWrite(AOutput, '[USER]');
-				grModel: StreamWrite(AOutput, '[MODEL]');
-			end;
-			if LChunk.CreateTime > 0 then
-				StreamWrite(AOutput, ' ' + FormatCreateTime(LChunk.CreateTime));
-			if LChunk.TokenCount > 0 then
-				StreamWrite(AOutput, ' (' + IntToStr(LChunk.TokenCount) + ' tokens)');
-			StreamWriteLn(AOutput);
-
-			// Part-level thinking (model chunks with mixed parts)
-			LThinking := LChunk.GetThinkingText;
-			if LThinking <> '' then
-			begin
-				StreamWriteLn(AOutput, '<Thinking>');
-				StreamWriteLn(AOutput, LThinking);
-				StreamWriteLn(AOutput, '</Thinking>');
-				StreamWriteLn(AOutput);
-			end;
-
-			// Main text
-			if LText <> '' then
-				StreamWriteLn(AOutput, LText);
-
-			// Resource indicator
-			if LHasResource then
-				StreamWriteLn(AOutput, '[Attached: ' + LResInfo.FileName +
-					' (' + LResInfo.MimeType + ', ~' + FormatByteSize(LResInfo.DecodedSize) + ')]');
 		end;
 
-		StreamWriteLn(AOutput);
+		// Only emit trailing blank line if the group produced visible output
+		if (LGroup.Kind = gkThinking) or (not LFirstContent) then
+			StreamWriteLn(AOutput);
 	end;
 
 	// Trailing remote attachment hint (empty blocks at end of conversation)

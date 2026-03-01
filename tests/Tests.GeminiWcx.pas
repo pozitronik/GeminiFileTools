@@ -110,6 +110,8 @@ type
 		procedure DefaultConfig_FullWidthIsFalse;
 		[Test]
 		procedure DefaultConfig_ExpandThinkingIsFalse;
+		[Test]
+		procedure DefaultConfig_CombineBlocksAllFalse;
 	end;
 
 implementation
@@ -673,6 +675,16 @@ begin
 	LConfig := GetPluginConfig;
 	Assert.IsFalse(LConfig.DefaultExpandThinking,
 		'DefaultExpandThinking should default to False');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_CombineBlocksAllFalse;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsFalse(LConfig.CombineBlocksText, 'CombineBlocksText default');
+	Assert.IsFalse(LConfig.CombineBlocksMd, 'CombineBlocksMd default');
+	Assert.IsFalse(LConfig.CombineBlocksHtml, 'CombineBlocksHtml default');
 end;
 
 // ========================================================================

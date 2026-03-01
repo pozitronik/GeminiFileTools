@@ -22,6 +22,7 @@ uses
   GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
   GeminiFile.Formatter.Html in '..\src\GeminiFile.Formatter.Html.pas',
   GeminiFile.Markdown in '..\src\GeminiFile.Markdown.pas',
+  GeminiFile.Grouping in '..\src\GeminiFile.Grouping.pas',
   WcxApi in '..\wcx\WcxApi.pas',
   GeminiWcx in '..\wcx\GeminiWcx.pas',
   Tests.GeminiFile.Types in 'Tests.GeminiFile.Types.pas',
@@ -32,7 +33,8 @@ uses
   Tests.GeminiFile.Integration in 'Tests.GeminiFile.Integration.pas',
   Tests.GeminiFile.Formatter in 'Tests.GeminiFile.Formatter.pas',
   Tests.GeminiFile.Markdown in 'Tests.GeminiFile.Markdown.pas',
-  Tests.GeminiWcx in 'Tests.GeminiWcx.pas';
+  Tests.GeminiWcx in 'Tests.GeminiWcx.pas',
+  Tests.GeminiFile.Grouping in 'Tests.GeminiFile.Grouping.pas';
 
 var
   LRunner: ITestRunner;
