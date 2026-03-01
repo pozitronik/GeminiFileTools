@@ -21,3 +21,5 @@
 /app/*.identcache
 /wcx_build.bat
 /wcx/*.identcache
+/*.zip
+/release.bat

@@ -123,7 +123,7 @@ const
 		'body.full-width { max-width: none; }' + CRLF +
 		'#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' +
 		' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' +
-		' display: flex; gap: 6px; flex-wrap: wrap; max-width: 220px; }' + CRLF +
+		' display: flex; gap: 6px; }' + CRLF +
 		'#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' +
 		' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' + CRLF +
 		'#controls button:hover { background: #e0e0e0; }' + CRLF +
