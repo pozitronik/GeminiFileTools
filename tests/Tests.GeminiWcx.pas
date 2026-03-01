@@ -39,6 +39,8 @@ type
 		procedure FileSizes_NonZeroForAllEntries;
 		[Test]
 		procedure FileTime_SetFromSourceFile;
+		[Test]
+		procedure ResourcePaths_MatchResourceInfoPaths;
 	end;
 
 	[TestFixture]
@@ -457,6 +459,83 @@ begin
 		end;
 	finally
 		LArchive.Free;
+	end;
+end;
+
+procedure TTestGeminiWcxVirtualFileList.ResourcePaths_MatchResourceInfoPaths;
+var
+	LGeminiFile: TGeminiFile;
+	LResources: TArray<TGeminiResource>;
+	LArchive: TGeminiArchive;
+	LHeader: THeaderDataExW;
+	LPath, LFileName: string;
+	LExpectedPaths: TArray<string>;
+	I, LPadWidth: Integer;
+	LChunk: TGeminiChunk;
+	LIsThinking: Boolean;
+	LSubDir: string;
+	LResourcePaths: TList<string>;
+begin
+	// Verify that virtual file list paths for resources correspond exactly
+	// to the resource info paths (with / replaced by \)
+	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	if LPath = '' then
+		Exit;
+
+	// Build expected paths independently using the same naming rules
+	LGeminiFile := TGeminiFile.Create;
+	try
+		LGeminiFile.LoadFromFile(LPath);
+		LResources := LGeminiFile.GetResources;
+		LPadWidth := Length(IntToStr(Length(LResources)));
+		if LPadWidth < 3 then
+			LPadWidth := 3;
+
+		SetLength(LExpectedPaths, Length(LResources));
+		for I := 0 to High(LResources) do
+		begin
+			LIsThinking := False;
+			for LChunk in LGeminiFile.Chunks do
+				if LChunk.Index = LResources[I].ChunkIndex then
+				begin
+					LIsThinking := LChunk.IsThought;
+					Break;
+				end;
+			if LIsThinking then
+				LSubDir := 'resources\think\'
+			else
+				LSubDir := 'resources\';
+			LExpectedPaths[I] := Format(LSubDir + 'resource_%.*d%s',
+				[LPadWidth, I, LResources[I].GetFileExtension]);
+		end;
+	finally
+		LGeminiFile.Free;
+	end;
+
+	// Collect resource paths from the archive
+	LResourcePaths := TList<string>.Create;
+	try
+		LArchive := TGeminiArchive.Create(LPath, PK_OM_LIST);
+		try
+			while LArchive.ReadNextHeader(LHeader) = 0 do
+			begin
+				LFileName := LHeader.FileName;
+				if LFileName.StartsWith('resources\resource_') or
+					LFileName.StartsWith('resources\think\resource_') then
+					LResourcePaths.Add(LFileName);
+				LArchive.ProcessCurrentFile(PK_SKIP, '', '');
+			end;
+		finally
+			LArchive.Free;
+		end;
+
+		Assert.AreEqual(Length(LExpectedPaths), LResourcePaths.Count,
+			'Resource count mismatch between expected and actual');
+		for I := 0 to LResourcePaths.Count - 1 do
+			Assert.AreEqual(LExpectedPaths[I], LResourcePaths[I],
+				Format('Resource path mismatch at index %d', [I]));
+	finally
+		LResourcePaths.Free;
 	end;
 end;
 

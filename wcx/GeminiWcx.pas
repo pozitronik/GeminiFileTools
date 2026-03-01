@@ -442,9 +442,7 @@ procedure TGeminiArchive.BuildVirtualFileList;
 var
 	LEntry: TVirtualFileEntry;
 	I: Integer;
-	LPadWidth: Integer;
 	LHasThinkingResources: Boolean;
-	LSubDir: string;
 	LConfig: TPluginConfig;
 begin
 	FVirtualFiles.Clear;
@@ -505,9 +503,10 @@ begin
 		FVirtualFiles.Add(LEntry);
 
 		// resources\think\ subdirectory (only if thinking resources exist)
+		// Derived from FResourceInfos paths (populated by BuildResourceInfos)
 		LHasThinkingResources := False;
-		for I := 0 to High(FResources) do
-			if IsThinkingResource(FResources[I].ChunkIndex) then
+		for I := 0 to High(FResourceInfos) do
+			if FResourceInfos[I].FileName.StartsWith('resources/think/') then
 			begin
 				LHasThinkingResources := True;
 				Break;
@@ -522,22 +521,13 @@ begin
 			FVirtualFiles.Add(LEntry);
 		end;
 
-		// Individual resources
-		LPadWidth := Length(IntToStr(Length(FResources)));
-		if LPadWidth < 3 then
-			LPadWidth := 3;
-
-		for I := 0 to High(FResources) do
+		// Individual resources -- paths derived from FResourceInfos (single source of truth)
+		for I := 0 to High(FResourceInfos) do
 		begin
-			if IsThinkingResource(FResources[I].ChunkIndex) then
-				LSubDir := 'resources\think\'
-			else
-				LSubDir := 'resources\';
 			LEntry := Default(TVirtualFileEntry);
-			LEntry.Path := Format(LSubDir + 'resource_%.*d%s',
-				[LPadWidth, I, FResources[I].GetFileExtension]);
+			LEntry.Path := StringReplace(FResourceInfos[I].FileName, '/', '\', [rfReplaceAll]);
 			LEntry.Kind := vfResource;
-			LEntry.UnpackedSize := FResources[I].DecodedSize;
+			LEntry.UnpackedSize := FResourceInfos[I].DecodedSize;
 			LEntry.FileTime := FFileTime;
 			LEntry.ResourceIndex := I;
 			FVirtualFiles.Add(LEntry);
