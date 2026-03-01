@@ -107,6 +107,7 @@ type
 		HideEmptyBlocksHtml: Boolean;
 		DefaultFullWidth: Boolean;
 		DefaultExpandThinking: Boolean;
+		RenderMarkdown: Boolean;
 	end;
 
 /// <summary>
@@ -196,6 +197,7 @@ begin
 		GPluginConfig.HideEmptyBlocksText := True;
 		GPluginConfig.HideEmptyBlocksMd := True;
 		GPluginConfig.HideEmptyBlocksHtml := True;
+		GPluginConfig.RenderMarkdown := True;
 		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
 		begin
 			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
@@ -215,6 +217,8 @@ begin
 						LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', False);
 					GPluginConfig.DefaultExpandThinking :=
 						LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', False);
+					GPluginConfig.RenderMarkdown :=
+						LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', True);
 				finally
 					LIni.Free;
 				end;
@@ -360,6 +364,7 @@ begin
 			LHtmlFormatter.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
 			LHtmlFormatter.DefaultFullWidth := LConfig.DefaultFullWidth;
 			LHtmlFormatter.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+			LHtmlFormatter.RenderMarkdown := LConfig.RenderMarkdown;
 			LHtmlFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 				FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		finally
@@ -553,6 +558,7 @@ begin
 					LFormatter.HideEmptyBlocks := GetPluginConfig.HideEmptyBlocksHtml;
 					LFormatter.DefaultFullWidth := GetPluginConfig.DefaultFullWidth;
 					LFormatter.DefaultExpandThinking := GetPluginConfig.DefaultExpandThinking;
+					LFormatter.RenderMarkdown := GetPluginConfig.RenderMarkdown;
 					LFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
 						FGeminiFile.SystemInstruction, FGeminiFile.RunSettings,
 						FResourceInfos);

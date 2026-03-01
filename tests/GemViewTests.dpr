@@ -21,6 +21,7 @@ uses
   GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',
   GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
   GeminiFile.Formatter.Html in '..\src\GeminiFile.Formatter.Html.pas',
+  GeminiFile.Markdown in '..\src\GeminiFile.Markdown.pas',
   WcxApi in '..\wcx\WcxApi.pas',
   GeminiWcx in '..\wcx\GeminiWcx.pas',
   Tests.GeminiFile.Types in 'Tests.GeminiFile.Types.pas',
@@ -30,6 +31,7 @@ uses
   Tests.GeminiFile.Extractor in 'Tests.GeminiFile.Extractor.pas',
   Tests.GeminiFile.Integration in 'Tests.GeminiFile.Integration.pas',
   Tests.GeminiFile.Formatter in 'Tests.GeminiFile.Formatter.pas',
+  Tests.GeminiFile.Markdown in 'Tests.GeminiFile.Markdown.pas',
   Tests.GeminiWcx in 'Tests.GeminiWcx.pas';
 
 var

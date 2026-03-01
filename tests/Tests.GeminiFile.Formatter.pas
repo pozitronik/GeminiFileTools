@@ -153,6 +153,10 @@ type
 		procedure DefaultFullWidth_AddsClassToBody;
 		[Test]
 		procedure DefaultExpandThinking_AddsOpenAttribute;
+		[Test]
+		procedure RenderMarkdown_AppliesConversion;
+		[Test]
+		procedure RenderMarkdownFalse_PreservesEscaping;
 	end;
 
 implementation
@@ -661,7 +665,7 @@ begin
 	Assert.Contains(LResult, '<!DOCTYPE html>');
 	Assert.Contains(LResult, '<html');
 	Assert.Contains(LResult, '<head>');
-	Assert.Contains(LResult, '<body>');
+	Assert.Contains(LResult, '<body');
 	Assert.Contains(LResult, '</html>');
 end;
 
@@ -851,7 +855,7 @@ begin
 	finally
 		LStream.Free;
 	end;
-	Assert.Contains(LResult, '<body class="full-width">');
+	Assert.Contains(LResult, 'full-width');
 	Assert.Contains(LResult, 'Column width</button>');
 end;
 
@@ -880,6 +884,63 @@ begin
 		LStream.Free;
 	end;
 	Assert.Contains(LResult, '<details class="thinking" open>');
+end;
+
+procedure TTestGeminiHtmlFormatter.RenderMarkdown_AppliesConversion;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, '**bold**'));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.RenderMarkdown := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<strong>bold</strong>');
+	Assert.Contains(LResult, 'class="md"');
+end;
+
+procedure TTestGeminiHtmlFormatter.RenderMarkdownFalse_PreservesEscaping;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, '**bold**'));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.RenderMarkdown := False;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '**bold**');
+	Assert.IsFalse(LResult.Contains('<strong>'), 'Markdown should not be rendered when disabled');
+	Assert.IsFalse(LResult.Contains('class="md"'), 'md class should not be present when disabled');
 end;
 
 initialization

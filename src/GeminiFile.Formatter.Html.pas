@@ -27,6 +27,7 @@ type
 		FHideEmptyBlocks: Boolean;
 		FDefaultFullWidth: Boolean;
 		FDefaultExpandThinking: Boolean;
+		FRenderMarkdown: Boolean;
 		FCustomCSS: string;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
@@ -39,6 +40,8 @@ type
 		property DefaultFullWidth: Boolean read FDefaultFullWidth write FDefaultFullWidth;
 		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
 		property DefaultExpandThinking: Boolean read FDefaultExpandThinking write FDefaultExpandThinking;
+		/// <summary>When True, Markdown in model output is rendered as HTML (bold, italic, code, etc).</summary>
+		property RenderMarkdown: Boolean read FRenderMarkdown write FRenderMarkdown;
 
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 HTML.
@@ -58,6 +61,9 @@ type
 	end;
 
 implementation
+
+uses
+	GeminiFile.Markdown;
 
 const
 	CRLF = #13#10;
@@ -115,7 +121,17 @@ const
 		' display: flex; gap: 6px; flex-wrap: wrap; max-width: 220px; }' + CRLF +
 		'#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' +
 		' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' + CRLF +
-		'#controls button:hover { background: #e0e0e0; }';
+		'#controls button:hover { background: #e0e0e0; }' + CRLF +
+		'body.md .content { white-space: normal; }' + CRLF +
+		'body.md .content p { margin: 0.4em 0; }' + CRLF +
+		'body.md .content p:first-child { margin-top: 0; }' + CRLF +
+		'body.md .content p:last-child { margin-bottom: 0; }' + CRLF +
+		'body.md .content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px;' +
+		' border-radius: 6px; overflow-x: auto; white-space: pre; font-family: Consolas, Monaco, monospace;' +
+		' margin: 8px 0; line-height: 1.4; }' + CRLF +
+		'body.md .content pre code { background: none; padding: 0; border-radius: 0; color: inherit; }' + CRLF +
+		'body.md .content code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px;' +
+		' font-family: Consolas, Monaco, monospace; font-size: 0.9em; }';
 
 { TGeminiHtmlFormatter }
 
@@ -124,6 +140,7 @@ begin
 	inherited Create;
 	FEmbedResources := AEmbedResources;
 	FHideEmptyBlocks := True;
+	FRenderMarkdown := True;
 	FCustomCSS := ACustomCSS;
 end;
 
@@ -141,6 +158,7 @@ var
 	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
 	LRoleClass, LRoleLabel, LSummary: string;
+	LBodyClasses: string;
 begin
 	LFmt := TFormatSettings.Invariant;
 	LPendingRemoteCount := 0;
@@ -158,8 +176,15 @@ begin
 		StreamWriteLn(AOutput, FCustomCSS);
 	StreamWriteLn(AOutput, '</style>');
 	StreamWriteLn(AOutput, '</head>');
+	// Build body class list from active options
+	LBodyClasses := '';
 	if FDefaultFullWidth then
-		StreamWriteLn(AOutput, '<body class="full-width">')
+		LBodyClasses := LBodyClasses + ' full-width';
+	if FRenderMarkdown then
+		LBodyClasses := LBodyClasses + ' md';
+	LBodyClasses := Trim(LBodyClasses);
+	if LBodyClasses <> '' then
+		StreamWriteLn(AOutput, '<body class="' + LBodyClasses + '">')
 	else
 		StreamWriteLn(AOutput, '<body>');
 
@@ -214,7 +239,10 @@ begin
 			else if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
 				LSummary := LSummary + ' (with attachment)';
 			StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
-			StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
+			if FRenderMarkdown then
+				StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LText) + '</div>')
+			else
+				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
 			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
 			begin
 				if FEmbedResources and (LResInfo.Base64Data <> '') then
@@ -292,13 +320,21 @@ begin
 				else
 					StreamWriteLn(AOutput, '<details class="thinking">');
 				StreamWriteLn(AOutput, '<summary>Thinking</summary>');
-				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LThinking) + '</div>');
+				if FRenderMarkdown then
+					StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LThinking) + '</div>')
+				else
+					StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LThinking) + '</div>');
 				StreamWriteLn(AOutput, '</details>');
 			end;
 
 			// Main text
 			if LText <> '' then
-				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
+			begin
+				if FRenderMarkdown then
+					StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(LText) + '</div>')
+				else
+					StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
+			end;
 
 			// Resource
 			if LHasResource then
