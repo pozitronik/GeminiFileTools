@@ -39,6 +39,23 @@ type
 	EGeminiParseError = class(Exception);
 
 	/// <summary>
+	///   Resource info passed to formatters for link/embed generation.
+	///   Value record -- decouples formatters from TGeminiResource lifetime.
+	/// </summary>
+	TFormatterResourceInfo = record
+		/// <summary>Relative path for use in links, e.g. 'resources/resource_001.png'.</summary>
+		FileName: string;
+		/// <summary>MIME type, e.g. 'image/jpeg'.</summary>
+		MimeType: string;
+		/// <summary>Raw base64-encoded data. Only populated for embedded HTML formatter.</summary>
+		Base64Data: string;
+		/// <summary>Estimated decoded size in bytes.</summary>
+		DecodedSize: Int64;
+		/// <summary>Index of the parent chunk in the conversation.</summary>
+		ChunkIndex: Integer;
+	end;
+
+	/// <summary>
 	///   Maps a MIME type string to a file extension (with leading dot).
 	///   Falls back to '.bin' for unknown types. Case-insensitive.
 	/// </summary>
@@ -52,6 +69,16 @@ function MimeToExtension(const AMimeType: string): string;
 /// <param name="ASize">Size in bytes.</param>
 /// <returns>Formatted string, e.g. '1.5 MB'.</returns>
 function FormatByteSize(ASize: Int64): string;
+
+/// <summary>
+///   Finds a resource info record matching the given chunk index.
+/// </summary>
+/// <param name="AResources">Array of resource info records to search.</param>
+/// <param name="AChunkIndex">Chunk index to match.</param>
+/// <param name="AInfo">Output: matched resource info record.</param>
+/// <returns>True if a matching resource was found.</returns>
+function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
+	AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
 
 implementation
 
@@ -96,6 +123,20 @@ begin
 		Result := '.csv'
 	else
 		Result := '.bin';
+end;
+
+function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
+	AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
+var
+	I: Integer;
+begin
+	for I := 0 to High(AResources) do
+		if AResources[I].ChunkIndex = AChunkIndex then
+		begin
+			AInfo := AResources[I];
+			Exit(True);
+		end;
+	Result := False;
 end;
 
 function FormatByteSize(ASize: Int64): string;

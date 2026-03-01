@@ -109,7 +109,7 @@ function CloseArchive(hArcData: THandle): Integer; stdcall;
 procedure SetChangeVolProcW(hArcData: THandle; pChangeVolProc: TChangeVolProcW); stdcall;
 procedure SetProcessDataProcW(hArcData: THandle; pProcessDataProc: TProcessDataProcW); stdcall;
 function GetPackerCaps: Integer; stdcall;
-function CanYouHandleThisFileW(FileName: PWideChar): Boolean; stdcall;
+function CanYouHandleThisFileW(FileName: PWideChar): LongBool; stdcall;
 function GetBackgroundFlags: Integer; stdcall;
 
 // ANSI (compatibility)
@@ -120,7 +120,7 @@ function ProcessFile(hArcData: THandle; Operation: Integer;
 	DestPath: PAnsiChar; DestName: PAnsiChar): Integer; stdcall;
 procedure SetChangeVolProc(hArcData: THandle; pChangeVolProc: TChangeVolProc); stdcall;
 procedure SetProcessDataProc(hArcData: THandle; pProcessDataProc: TProcessDataProc); stdcall;
-function CanYouHandleThisFile(FileName: PAnsiChar): Boolean; stdcall;
+function CanYouHandleThisFile(FileName: PAnsiChar): LongBool; stdcall;
 
 implementation
 
@@ -607,26 +607,32 @@ begin
 	Result := PK_CAPS_MULTIPLE or PK_CAPS_BY_CONTENT or PK_CAPS_SEARCHTEXT;
 end;
 
-function CanYouHandleThisFileW(FileName: PWideChar): Boolean; stdcall;
+function CanYouHandleThisFileW(FileName: PWideChar): LongBool; stdcall;
 var
 	LStream: TFileStream;
 	LByte: Byte;
+	LBom: array[0..1] of Byte;
 begin
 	Result := False;
 	try
 		LStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
 		try
+			// Skip UTF-8 BOM if present (EF BB BF)
+			if (LStream.Size >= 3) and (LStream.Read(LByte, 1) = 1) and (LByte = $EF) then
+			begin
+				if (LStream.Read(LBom, 2) = 2) and (LBom[0] = $BB) and (LBom[1] = $BF) then
+					{ BOM consumed, stream at position 3 }
+				else
+					LStream.Position := 0; // Not a BOM, rewind
+			end
+			else
+				LStream.Position := 0;
+
 			// Skip whitespace, look for '{'
 			while LStream.Read(LByte, 1) = 1 do
 			begin
 				if LByte in [$09, $0A, $0D, $20] then
 					Continue;
-				// Skip UTF-8 BOM
-				if (LByte = $EF) and (LStream.Size >= 3) then
-				begin
-					LStream.Position := 3;
-					Continue;
-				end;
 				Result := LByte = Ord('{');
 				Break;
 			end;
@@ -650,9 +656,11 @@ end;
 function OpenArchive(var ArchiveData: TOpenArchiveData): THandle; stdcall;
 var
 	LDataW: TOpenArchiveDataW;
+	LArcNameW: WideString;
 begin
 	FillChar(LDataW, SizeOf(LDataW), 0);
-	LDataW.ArcName := PWideChar(WideString(AnsiString(ArchiveData.ArcName)));
+	LArcNameW := WideString(AnsiString(ArchiveData.ArcName));
+	LDataW.ArcName := PWideChar(LArcNameW);
 	LDataW.OpenMode := ArchiveData.OpenMode;
 
 	Result := OpenArchiveW(LDataW);
@@ -744,7 +752,7 @@ begin
 	// ANSI callback not stored -- TC uses Unicode variant when available
 end;
 
-function CanYouHandleThisFile(FileName: PAnsiChar): Boolean; stdcall;
+function CanYouHandleThisFile(FileName: PAnsiChar): LongBool; stdcall;
 var
 	LWide: WideString;
 begin

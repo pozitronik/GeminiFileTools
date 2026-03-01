@@ -79,6 +79,8 @@ type
 		property DecodedSize: Int64 read GetDecodedSize;
 		/// <summary>Raw base64 string size in characters.</summary>
 		property Base64Size: Int64 read GetBase64Size;
+		/// <summary>Raw base64-encoded data string. Empty if already decoded and released.</summary>
+		property Base64Data: string read FBase64Data;
 		/// <summary>Index of the parent chunk in the conversation.</summary>
 		property ChunkIndex: Integer read FChunkIndex;
 	end;

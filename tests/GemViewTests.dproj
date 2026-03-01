@@ -84,12 +84,19 @@
         <DCCReference Include="..\src\GeminiFile.Parser.pas"/>
         <DCCReference Include="..\src\GeminiFile.Extractor.pas"/>
         <DCCReference Include="..\src\GeminiFile.pas"/>
+        <DCCReference Include="..\src\GeminiFile.Formatter.Text.pas"/>
+        <DCCReference Include="..\src\GeminiFile.Formatter.Md.pas"/>
+        <DCCReference Include="..\src\GeminiFile.Formatter.Html.pas"/>
+        <DCCReference Include="..\wcx\WcxApi.pas"/>
+        <DCCReference Include="..\wcx\GeminiWcx.pas"/>
         <DCCReference Include="Tests.GeminiFile.Types.pas"/>
         <DCCReference Include="Tests.GeminiFile.Resource.pas"/>
         <DCCReference Include="Tests.GeminiFile.Chunk.pas"/>
         <DCCReference Include="Tests.GeminiFile.Parser.pas"/>
         <DCCReference Include="Tests.GeminiFile.Extractor.pas"/>
         <DCCReference Include="Tests.GeminiFile.Integration.pas"/>
+        <DCCReference Include="Tests.GeminiFile.Formatter.pas"/>
+        <DCCReference Include="Tests.GeminiWcx.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

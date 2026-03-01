@@ -16,3 +16,7 @@
 *.map
 *.xml
 *.~*
+*.wcx
+*.wcx64
+/app/*.identcache
+/wcx_build.bat

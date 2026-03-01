@@ -18,12 +18,19 @@ uses
   GeminiFile.Parser in '..\src\GeminiFile.Parser.pas',
   GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
   GeminiFile in '..\src\GeminiFile.pas',
+  GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',
+  GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
+  GeminiFile.Formatter.Html in '..\src\GeminiFile.Formatter.Html.pas',
+  WcxApi in '..\wcx\WcxApi.pas',
+  GeminiWcx in '..\wcx\GeminiWcx.pas',
   Tests.GeminiFile.Types in 'Tests.GeminiFile.Types.pas',
   Tests.GeminiFile.Resource in 'Tests.GeminiFile.Resource.pas',
   Tests.GeminiFile.Chunk in 'Tests.GeminiFile.Chunk.pas',
   Tests.GeminiFile.Parser in 'Tests.GeminiFile.Parser.pas',
   Tests.GeminiFile.Extractor in 'Tests.GeminiFile.Extractor.pas',
-  Tests.GeminiFile.Integration in 'Tests.GeminiFile.Integration.pas';
+  Tests.GeminiFile.Integration in 'Tests.GeminiFile.Integration.pas',
+  Tests.GeminiFile.Formatter in 'Tests.GeminiFile.Formatter.pas',
+  Tests.GeminiWcx in 'Tests.GeminiWcx.pas';
 
 var
   LRunner: ITestRunner;
