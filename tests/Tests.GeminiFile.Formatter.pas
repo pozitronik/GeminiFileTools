@@ -49,6 +49,8 @@ type
 		procedure SystemInstruction_AbsentWhenEmpty;
 		[Test]
 		procedure MetadataHeader_IncludesModelAndSettings;
+		[Test]
+		procedure ThinkingChunkWithResource_InsertsAttachedPlaceholder;
 	end;
 
 	[TestFixture]
@@ -81,6 +83,8 @@ type
 		procedure SystemInstruction_AbsentWhenEmpty;
 		[Test]
 		procedure MetadataHeader_WithModelInfo;
+		[Test]
+		procedure ThinkingChunkWithResource_InsertsImageLink;
 	end;
 
 	[TestFixture]
@@ -115,6 +119,8 @@ type
 		procedure SystemInstruction_RenderedWhenPresent;
 		[Test]
 		procedure EmptyConversation_ProducesValidHtml;
+		[Test]
+		procedure ThinkingChunkWithResource_RendersImage;
 	end;
 
 implementation
@@ -251,6 +257,24 @@ begin
 	Assert.Contains(LResult, 'Temperature: 0.7');
 end;
 
+procedure TTestGeminiTextFormatter.ThinkingChunkWithResource_InsertsAttachedPlaceholder;
+var
+	LResult: string;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Reasoning about image...', 0, True));
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.png';
+	LRes[0].MimeType := 'image/png';
+	LRes[0].DecodedSize := 204800;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString('', LRes);
+	Assert.Contains(LResult, '<Thinking>');
+	Assert.Contains(LResult, 'Reasoning about image...');
+	Assert.Contains(LResult, '</Thinking>');
+	Assert.Contains(LResult, '[Attached: resources/resource_000.png (image/png');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -379,6 +403,23 @@ begin
 	LResult := FormatToString('', nil);
 	Assert.Contains(LResult, '**Model:** models/gemini-2.5-pro');
 	Assert.Contains(LResult, '**Temperature:** 1.0');
+end;
+
+procedure TTestGeminiMarkdownFormatter.ThinkingChunkWithResource_InsertsImageLink;
+var
+	LResult: string;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Analyzing the image...', 0, True));
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.jpg';
+	LRes[0].MimeType := 'image/jpeg';
+	LRes[0].DecodedSize := 102400;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString('', LRes);
+	Assert.Contains(LResult, 'Thinking (with attachment)');
+	Assert.Contains(LResult, '![resource_000.jpg](resources/resource_000.jpg)');
+	Assert.Contains(LResult, '</details>');
 end;
 
 // ========================================================================
@@ -534,6 +575,23 @@ begin
 	Assert.Contains(LResult, '<!DOCTYPE html>');
 	Assert.Contains(LResult, '</html>');
 	Assert.Contains(LResult, 'Gemini Conversation');
+end;
+
+procedure TTestGeminiHtmlFormatter.ThinkingChunkWithResource_RendersImage;
+var
+	LResult: string;
+	LRes: TArray<TFormatterResourceInfo>;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Looking at the picture...', 0, True));
+	SetLength(LRes, 1);
+	LRes[0].FileName := 'resources/resource_000.png';
+	LRes[0].MimeType := 'image/png';
+	LRes[0].DecodedSize := 51200;
+	LRes[0].ChunkIndex := 0;
+	LResult := FormatToString(False, '', LRes);
+	Assert.Contains(LResult, 'Thinking (with attachment)');
+	Assert.Contains(LResult, '<img class="resource-img" src="resources/resource_000.png"');
+	Assert.Contains(LResult, '</details>');
 end;
 
 initialization

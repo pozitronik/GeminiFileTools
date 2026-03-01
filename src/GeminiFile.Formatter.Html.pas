@@ -173,8 +173,27 @@ begin
 			if LText = '' then
 				LText := LChunk.Text;
 			StreamWriteLn(AOutput, '<details>');
-			StreamWriteLn(AOutput, '<summary>Thinking</summary>');
+			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				StreamWriteLn(AOutput, '<summary>Thinking (with attachment)</summary>')
+			else
+				StreamWriteLn(AOutput, '<summary>Thinking</summary>');
 			StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
+			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+			begin
+				if FEmbedResources and (LResInfo.Base64Data <> '') then
+				begin
+					StreamWrite(AOutput, '<img class="resource-img" src="data:' +
+						HtmlEscape(LResInfo.MimeType) + ';base64,');
+					StreamWrite(AOutput, LResInfo.Base64Data);
+					StreamWriteLn(AOutput, '" />');
+				end
+				else
+					StreamWriteLn(AOutput, '<img class="resource-img" src="' +
+						HtmlEscape(LResInfo.FileName) + '" />');
+				StreamWriteLn(AOutput, '<div class="resource-info">' +
+					HtmlEscape(LResInfo.FileName) + ' (' + HtmlEscape(LResInfo.MimeType) +
+					', ~' + FormatByteSize(LResInfo.DecodedSize) + ')</div>');
+			end;
 			StreamWriteLn(AOutput, '</details>');
 		end
 		else

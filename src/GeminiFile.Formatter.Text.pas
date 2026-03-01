@@ -110,6 +110,10 @@ begin
 			StreamWriteLn(AOutput, '<Thinking>');
 			StreamWriteLn(AOutput, LText);
 			StreamWriteLn(AOutput, '</Thinking>');
+			// Resource indicator for thinking chunks with attachments
+			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				StreamWriteLn(AOutput, '[Attached: ' + LResInfo.FileName +
+					' (' + LResInfo.MimeType + ', ~' + FormatByteSize(LResInfo.DecodedSize) + ')]');
 		end
 		else
 		begin

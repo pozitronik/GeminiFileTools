@@ -135,10 +135,15 @@ begin
 			LText := LChunk.GetThinkingText;
 			if LText = '' then
 				LText := LChunk.Text;
-			StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
+			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				StreamWriteLn(AOutput, '<details><summary>Thinking (with attachment)</summary>')
+			else
+				StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
 			StreamWriteLn(AOutput);
 			StreamWriteLn(AOutput, LText);
 			StreamWriteLn(AOutput);
+			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+				StreamWriteLn(AOutput, '![' + TPath.GetFileName(LResInfo.FileName) + '](' + LResInfo.FileName + ')');
 			StreamWriteLn(AOutput, '</details>');
 		end
 		else
