@@ -25,23 +25,14 @@ uses
   System.SysUtils,
   System.Math,
   System.IOUtils,
+  GeminiFile.Types in '..\src\GeminiFile.Types.pas',
+  GeminiFile.Model in '..\src\GeminiFile.Model.pas',
+  GeminiFile.Parser in '..\src\GeminiFile.Parser.pas',
+  GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
   GeminiFile in '..\src\GeminiFile.pas';
 
 const
-  APP_VERSION = '0.1.0';
-
-/// <summary>Formats a byte size as a human-readable string.</summary>
-function FormatSize(ASize: Int64): string;
-begin
-  if ASize < 1024 then
-    Result := Format('%d B', [ASize])
-  else if ASize < 1024 * 1024 then
-    Result := Format('%.1f KB', [ASize / 1024.0])
-  else if ASize < Int64(1024) * 1024 * 1024 then
-    Result := Format('%.1f MB', [ASize / (1024.0 * 1024.0)])
-  else
-    Result := Format('%.2f GB', [ASize / (1024.0 * 1024.0 * 1024.0)]);
-end;
+  APP_VERSION = '0.2.0';
 
 /// <summary>Prints usage information.</summary>
 procedure PrintHelp;
@@ -106,7 +97,7 @@ begin
     Exit;
   try
     WriteLn('File: ', AFileName);
-    WriteLn('File size: ', FormatSize(TFile.GetSize(AFileName)));
+    WriteLn('File size: ', FormatByteSize(TFile.GetSize(AFileName)));
     WriteLn;
 
     // Run settings
@@ -151,7 +142,7 @@ begin
       LSysInstr := LFile.SystemInstruction;
       if Length(LSysInstr) > 500 then
         LSysInstr := Copy(LSysInstr, 1, 500) + '... [truncated, ' +
-          FormatSize(Length(LFile.SystemInstruction) * SizeOf(Char)) + ' total]';
+          FormatByteSize(Length(LFile.SystemInstruction) * SizeOf(Char)) + ' total]';
       WriteLn(LSysInstr);
     end
     else
@@ -177,7 +168,7 @@ begin
       LTotalResSize := 0;
       for I := 0 to High(LResources) do
         Inc(LTotalResSize, LResources[I].DecodedSize);
-      WriteLn('Total est. size:   ', FormatSize(LTotalResSize));
+      WriteLn('Total est. size:   ', FormatByteSize(LTotalResSize));
     end;
   finally
     LFile.Free;
@@ -235,7 +226,7 @@ begin
       begin
         LRes := LChunk.GetResource;
         if LRes <> nil then
-          WriteLn('[IMAGE: ', LRes.MimeType, ', ~', FormatSize(LRes.DecodedSize), ']');
+          WriteLn('[IMAGE: ', LRes.MimeType, ', ~', FormatByteSize(LRes.DecodedSize), ']');
       end;
 
       // Drive image reference
@@ -282,15 +273,15 @@ begin
         I,
         LResources[I].ChunkIndex,
         LResources[I].MimeType,
-        FormatSize(LResources[I].Base64Size),
-        FormatSize(LResources[I].DecodedSize),
+        FormatByteSize(LResources[I].Base64Size),
+        FormatByteSize(LResources[I].DecodedSize),
         LResources[I].GetFileExtension
       ]));
       Inc(LTotalSize, LResources[I].DecodedSize);
     end;
 
     WriteLn(StringOfChar('-', 76));
-    WriteLn(Format('Total: %d resources, ~%s estimated', [Length(LResources), FormatSize(LTotalSize)]));
+    WriteLn(Format('Total: %d resources, ~%s estimated', [Length(LResources), FormatByteSize(LTotalSize)]));
   finally
     LFile.Free;
   end;
