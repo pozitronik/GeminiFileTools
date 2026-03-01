@@ -440,8 +440,6 @@ begin
 		StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Column width</button>')
 	else
 		StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Full width</button>');
-	StreamWriteLn(AOutput, '<button onclick="setDetails(true)">Expand all</button>');
-	StreamWriteLn(AOutput, '<button onclick="setDetails(false)">Collapse all</button>');
 	StreamWriteLn(AOutput, '<button onclick="setThinking(true)">Expand thinking</button>');
 	StreamWriteLn(AOutput, '<button onclick="setThinking(false)">Collapse thinking</button>');
 	StreamWriteLn(AOutput, '</div>');
@@ -451,9 +449,6 @@ begin
 	StreamWriteLn(AOutput, 'function toggleWidth(btn) {');
 	StreamWriteLn(AOutput, '  document.body.classList.toggle("full-width");');
 	StreamWriteLn(AOutput, '  btn.textContent = document.body.classList.contains("full-width") ? "Column width" : "Full width";');
-	StreamWriteLn(AOutput, '}');
-	StreamWriteLn(AOutput, 'function setDetails(open) {');
-	StreamWriteLn(AOutput, '  document.querySelectorAll("details").forEach(function(d) { d.open = open; });');
 	StreamWriteLn(AOutput, '}');
 	StreamWriteLn(AOutput, 'function setThinking(open) {');
 	StreamWriteLn(AOutput, '  document.querySelectorAll("details.thinking").forEach(function(d) { d.open = open; });');

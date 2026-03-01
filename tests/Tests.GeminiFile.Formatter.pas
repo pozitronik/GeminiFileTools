@@ -932,7 +932,6 @@ begin
 	LResult := FormatToString(False, '', nil);
 	Assert.Contains(LResult, 'id="controls"');
 	Assert.Contains(LResult, 'toggleWidth');
-	Assert.Contains(LResult, 'setDetails');
 	Assert.Contains(LResult, 'setThinking');
 end;
 
