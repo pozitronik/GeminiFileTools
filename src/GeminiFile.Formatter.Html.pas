@@ -67,34 +67,9 @@ type
 implementation
 
 uses
+	GeminiFile.Formatter.Utils,
 	GeminiFile.Markdown,
 	GeminiFile.Grouping;
-
-const
-	CRLF = #13#10;
-
-procedure StreamWrite(AStream: TStream; const AStr: string);
-var
-	LBytes: TBytes;
-begin
-	LBytes := TEncoding.UTF8.GetBytes(AStr);
-	if Length(LBytes) > 0 then
-		AStream.WriteBuffer(LBytes[0], Length(LBytes));
-end;
-
-procedure StreamWriteLn(AStream: TStream; const AStr: string = '');
-begin
-	StreamWrite(AStream, AStr + CRLF);
-end;
-
-function HtmlEscape(const AStr: string): string;
-begin
-	Result := AStr;
-	Result := StringReplace(Result, '&', '&amp;', [rfReplaceAll]);
-	Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
-end;
 
 const
 	CSS_STYLES =

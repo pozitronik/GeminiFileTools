@@ -20,22 +20,8 @@ function MarkdownToHtml(const AText: string): string;
 implementation
 
 uses
-	System.SysUtils;
-
-const
-	CRLF = #13#10;
-
-/// <summary>
-///   Replaces &amp; &lt; &gt; &quot; for safe HTML embedding.
-/// </summary>
-function HtmlEscape(const AStr: string): string;
-begin
-	Result := AStr;
-	Result := StringReplace(Result, '&', '&amp;', [rfReplaceAll]);
-	Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
-	Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
-end;
+	System.SysUtils,
+	GeminiFile.Formatter.Utils;
 
 /// <summary>
 ///   Splits text on a given delimiter string. Returns an array of parts

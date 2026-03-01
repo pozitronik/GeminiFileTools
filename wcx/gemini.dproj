@@ -88,6 +88,7 @@
         <DCCReference Include="..\src\GeminiFile.Parser.pas"/>
         <DCCReference Include="..\src\GeminiFile.Extractor.pas"/>
         <DCCReference Include="..\src\GeminiFile.pas"/>
+        <DCCReference Include="..\src\GeminiFile.Formatter.Utils.pas"/>
         <DCCReference Include="..\src\GeminiFile.Formatter.Text.pas"/>
         <DCCReference Include="..\src\GeminiFile.Formatter.Md.pas"/>
         <DCCReference Include="..\src\GeminiFile.Formatter.Html.pas"/>

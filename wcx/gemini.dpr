@@ -20,6 +20,7 @@ uses
 	GeminiFile.Parser in '..\src\GeminiFile.Parser.pas',
 	GeminiFile.Extractor in '..\src\GeminiFile.Extractor.pas',
 	GeminiFile in '..\src\GeminiFile.pas',
+	GeminiFile.Formatter.Utils in '..\src\GeminiFile.Formatter.Utils.pas',
 	GeminiFile.Formatter.Text in '..\src\GeminiFile.Formatter.Text.pas',
 	GeminiFile.Formatter.Md in '..\src\GeminiFile.Formatter.Md.pas',
 	GeminiFile.Formatter.Html in '..\src\GeminiFile.Formatter.Html.pas',
