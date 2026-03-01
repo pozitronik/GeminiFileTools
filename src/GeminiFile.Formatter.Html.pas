@@ -25,6 +25,8 @@ type
 	private
 		FEmbedResources: Boolean;
 		FHideEmptyBlocks: Boolean;
+		FDefaultFullWidth: Boolean;
+		FDefaultExpandThinking: Boolean;
 		FCustomCSS: string;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
@@ -33,6 +35,10 @@ type
 		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = '');
 		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
 		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
+		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
+		property DefaultFullWidth: Boolean read FDefaultFullWidth write FDefaultFullWidth;
+		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
+		property DefaultExpandThinking: Boolean read FDefaultExpandThinking write FDefaultExpandThinking;
 
 		/// <summary>
 		///   Writes the formatted conversation to the output stream as UTF-8 HTML.
@@ -152,7 +158,10 @@ begin
 		StreamWriteLn(AOutput, FCustomCSS);
 	StreamWriteLn(AOutput, '</style>');
 	StreamWriteLn(AOutput, '</head>');
-	StreamWriteLn(AOutput, '<body>');
+	if FDefaultFullWidth then
+		StreamWriteLn(AOutput, '<body class="full-width">')
+	else
+		StreamWriteLn(AOutput, '<body>');
 
 	// Title
 	StreamWriteLn(AOutput, '<h1>Gemini Conversation</h1>');
@@ -193,7 +202,10 @@ begin
 			LText := LChunk.GetThinkingText;
 			if LText = '' then
 				LText := LChunk.Text;
-			StreamWriteLn(AOutput, '<details class="thinking">');
+			if FDefaultExpandThinking then
+				StreamWriteLn(AOutput, '<details class="thinking" open>')
+			else
+				StreamWriteLn(AOutput, '<details class="thinking">');
 			LSummary := 'Thinking';
 			if (LChunk.CreateTime > 0) and FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
 				LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(LChunk.CreateTime)) + ', with attachment)'
@@ -275,7 +287,10 @@ begin
 			LThinking := LChunk.GetThinkingText;
 			if LThinking <> '' then
 			begin
-				StreamWriteLn(AOutput, '<details class="thinking">');
+				if FDefaultExpandThinking then
+					StreamWriteLn(AOutput, '<details class="thinking" open>')
+				else
+					StreamWriteLn(AOutput, '<details class="thinking">');
 				StreamWriteLn(AOutput, '<summary>Thinking</summary>');
 				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LThinking) + '</div>');
 				StreamWriteLn(AOutput, '</details>');
@@ -322,7 +337,10 @@ begin
 
 	// Controls panel
 	StreamWriteLn(AOutput, '<div id="controls">');
-	StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Full width</button>');
+	if FDefaultFullWidth then
+		StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Column width</button>')
+	else
+		StreamWriteLn(AOutput, '<button onclick="toggleWidth(this)">Full width</button>');
 	StreamWriteLn(AOutput, '<button onclick="setDetails(true)">Expand all</button>');
 	StreamWriteLn(AOutput, '<button onclick="setDetails(false)">Collapse all</button>');
 	StreamWriteLn(AOutput, '<button onclick="setThinking(true)">Expand thinking</button>');

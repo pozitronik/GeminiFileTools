@@ -149,6 +149,10 @@ type
 		procedure EmptyUserChunk_SkippedWithRemoteHint;
 		[Test]
 		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
+		[Test]
+		procedure DefaultFullWidth_AddsClassToBody;
+		[Test]
+		procedure DefaultExpandThinking_AddsOpenAttribute;
 	end;
 
 implementation
@@ -822,6 +826,60 @@ begin
 	LResult := FormatToString(False, '', nil);
 	Assert.Contains(LResult, '2 remote attachment(s)');
 	Assert.Contains(LResult, 'class="remote-attachments"');
+end;
+
+procedure TTestGeminiHtmlFormatter.DefaultFullWidth_AddsClassToBody;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.DefaultFullWidth := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<body class="full-width">');
+	Assert.Contains(LResult, 'Column width</button>');
+end;
+
+procedure TTestGeminiHtmlFormatter.DefaultExpandThinking_AddsOpenAttribute;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LBytes: TBytes;
+	LResult: string;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Reasoning...', 0, True));
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.DefaultExpandThinking := True;
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<details class="thinking" open>');
 end;
 
 initialization
