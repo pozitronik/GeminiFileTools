@@ -72,12 +72,44 @@ type
 	end;
 
 	[TestFixture]
+	TTestGeminiWcxProcessHtml = class
+	private
+		function ExamplesDir: string;
+		function FindExample(const AName: string): string;
+		/// <summary>
+		///   Extracts the HTML virtual file from an archive and returns its content.
+		///   Skips entries until conversation.html is found.
+		/// </summary>
+		function ExtractHtmlContent(const AExampleName: string): string;
+	public
+		[Test]
+		procedure HtmlOutput_BodyHasMdClass;
+		[Test]
+		procedure HtmlOutput_ContainsMarkdownCss;
+		[Test]
+		procedure HtmlOutput_ModelTextRenderedAsMarkdown;
+	end;
+
+	[TestFixture]
 	TTestGeminiWcxGetBaseName = class
 	public
 		[Test]
 		procedure WithUseOriginalName_ReturnsFileNameWithoutExt;
 		[Test]
 		procedure WithoutUseOriginalName_ReturnsConversation;
+	end;
+
+	[TestFixture]
+	TTestGeminiWcxPluginConfig = class
+	public
+		[Test]
+		procedure DefaultConfig_RenderMarkdownIsTrue;
+		[Test]
+		procedure DefaultConfig_HideEmptyBlocksAllTrue;
+		[Test]
+		procedure DefaultConfig_FullWidthIsFalse;
+		[Test]
+		procedure DefaultConfig_ExpandThinkingIsFalse;
 	end;
 
 implementation
@@ -504,6 +536,149 @@ end;
 // TTestGeminiWcxGetBaseName
 // ========================================================================
 
+// ========================================================================
+// TTestGeminiWcxProcessHtml
+// ========================================================================
+
+function TTestGeminiWcxProcessHtml.ExamplesDir: string;
+begin
+	Result := TPath.Combine(
+		TPath.GetDirectoryName(TPath.GetDirectoryName(TPath.GetDirectoryName(
+			TPath.GetDirectoryName(TPath.GetFullPath(ParamStr(0)))))),
+		'examples');
+	if not TDirectory.Exists(Result) then
+		Result := TPath.GetFullPath('..\examples');
+end;
+
+function TTestGeminiWcxProcessHtml.FindExample(const AName: string): string;
+begin
+	Result := TPath.Combine(ExamplesDir, AName);
+	if not FileExists(Result) then
+		Result := '';
+end;
+
+function TTestGeminiWcxProcessHtml.ExtractHtmlContent(const AExampleName: string): string;
+var
+	LArchive: TGeminiArchive;
+	LHeader: THeaderDataExW;
+	LPath, LOutDir, LOutFile: string;
+	LFileName: string;
+begin
+	Result := '';
+	LPath := FindExample(AExampleName);
+	if LPath = '' then
+		Exit;
+
+	LOutDir := TPath.Combine(TPath.GetTempPath,
+		'GemViewTest_WcxHtml_' + TGUID.NewGuid.ToString);
+
+	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
+	try
+		while LArchive.ReadNextHeader(LHeader) = 0 do
+		begin
+			LFileName := LHeader.FileName;
+			if LFileName = 'conversation.html' then
+			begin
+				LOutFile := TPath.Combine(LOutDir, 'conversation.html');
+				LArchive.ProcessCurrentFile(PK_EXTRACT, '', LOutFile);
+				if FileExists(LOutFile) then
+					Result := TFile.ReadAllText(LOutFile, TEncoding.UTF8);
+				Exit;
+			end;
+			LArchive.ProcessCurrentFile(PK_SKIP, '', '');
+		end;
+	finally
+		LArchive.Free;
+		if TDirectory.Exists(LOutDir) then
+			TDirectory.Delete(LOutDir, True);
+	end;
+end;
+
+procedure TTestGeminiWcxProcessHtml.HtmlOutput_BodyHasMdClass;
+var
+	LHtml: string;
+begin
+	LHtml := ExtractHtmlContent('Tailscale');
+	if LHtml = '' then
+		Exit;
+	// Default RenderMarkdown=True should add 'md' class to body
+	Assert.Contains(LHtml, 'md');
+	Assert.Contains(LHtml, '<body class="');
+end;
+
+procedure TTestGeminiWcxProcessHtml.HtmlOutput_ContainsMarkdownCss;
+var
+	LHtml: string;
+begin
+	LHtml := ExtractHtmlContent('Tailscale');
+	if LHtml = '' then
+		Exit;
+	// Markdown CSS rules should be present in output
+	Assert.Contains(LHtml, 'body.md .content');
+	Assert.Contains(LHtml, 'body.md .content pre');
+	Assert.Contains(LHtml, 'body.md .content code');
+end;
+
+procedure TTestGeminiWcxProcessHtml.HtmlOutput_ModelTextRenderedAsMarkdown;
+var
+	LHtml: string;
+begin
+	// Tailscale has model responses that contain ** bold ** markdown
+	LHtml := ExtractHtmlContent('Tailscale');
+	if LHtml = '' then
+		Exit;
+	// With RenderMarkdown=True, content divs should not use pre-wrap for
+	// markdown-rendered text -- the body.md CSS overrides white-space
+	Assert.Contains(LHtml, 'body.md .content { white-space: normal; }');
+	// Model output should contain rendered HTML tags, not raw markers
+	Assert.Contains(LHtml, '<div class="content"><p>');
+end;
+
+// ========================================================================
+// TTestGeminiWcxPluginConfig
+// ========================================================================
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_RenderMarkdownIsTrue;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsTrue(LConfig.RenderMarkdown,
+		'RenderMarkdown should default to True');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_HideEmptyBlocksAllTrue;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsTrue(LConfig.HideEmptyBlocksText, 'HideEmptyBlocksText default');
+	Assert.IsTrue(LConfig.HideEmptyBlocksMd, 'HideEmptyBlocksMd default');
+	Assert.IsTrue(LConfig.HideEmptyBlocksHtml, 'HideEmptyBlocksHtml default');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_FullWidthIsFalse;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsFalse(LConfig.DefaultFullWidth,
+		'DefaultFullWidth should default to False');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_ExpandThinkingIsFalse;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsFalse(LConfig.DefaultExpandThinking,
+		'DefaultExpandThinking should default to False');
+end;
+
+// ========================================================================
+// TTestGeminiWcxGetBaseName
+// ========================================================================
+
 procedure TTestGeminiWcxGetBaseName.WithUseOriginalName_ReturnsFileNameWithoutExt;
 begin
 	Assert.AreEqual('My Chat', GetBaseName('D:\files\My Chat', True),
@@ -522,6 +697,8 @@ initialization
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxVirtualFileList);
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxReadHeader);
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxProcessFile);
+	TDUnitX.RegisterTestFixture(TTestGeminiWcxProcessHtml);
 	TDUnitX.RegisterTestFixture(TTestGeminiWcxGetBaseName);
+	TDUnitX.RegisterTestFixture(TTestGeminiWcxPluginConfig);
 
 end.
