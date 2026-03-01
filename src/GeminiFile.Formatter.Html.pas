@@ -98,6 +98,7 @@ const
 		'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
 		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF +
 		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF +
+		'.remote-attachments { color: #888; font-size: 0.85em; font-style: italic; margin: 4px 0; }' + CRLF +
 		'.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
 		'body.full-width { max-width: none; }' + CRLF +
 		'#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' +
@@ -126,10 +127,13 @@ var
 	LChunk: TGeminiChunk;
 	LText, LThinking: string;
 	LResInfo: TFormatterResourceInfo;
+	LHasResource: Boolean;
+	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
 	LRoleClass, LRoleLabel, LSummary: string;
 begin
 	LFmt := TFormatSettings.Invariant;
+	LPendingRemoteCount := 0;
 
 	// HTML header
 	StreamWriteLn(AOutput, '<!DOCTYPE html>');
@@ -215,6 +219,18 @@ begin
 		end
 		else
 		begin
+			// Pre-compute text and resource for empty block detection
+			LText := LChunk.GetFullText;
+			LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
+
+			// Skip empty display blocks (no text, no embedded resource)
+			if (LText = '') and (not LHasResource) then
+			begin
+				if LChunk.DriveImageId <> '' then
+					Inc(LPendingRemoteCount);
+				Continue;
+			end;
+
 			// Message container
 			case LChunk.Role of
 				grUser:
@@ -241,6 +257,16 @@ begin
 					IntToStr(LChunk.TokenCount) + ' tokens)</span>');
 			StreamWriteLn(AOutput, '</div>');
 
+			// Emit pending remote attachment hint
+			if LPendingRemoteCount > 0 then
+			begin
+				StreamWriteLn(AOutput, '<div class="remote-attachments" title="' +
+					IntToStr(LPendingRemoteCount) +
+					' remote attachment(s) uploaded before this message">' +
+					IntToStr(LPendingRemoteCount) + ' remote attachment(s)</div>');
+				LPendingRemoteCount := 0;
+			end;
+
 			// Part-level thinking
 			LThinking := LChunk.GetThinkingText;
 			if LThinking <> '' then
@@ -252,12 +278,11 @@ begin
 			end;
 
 			// Main text
-			LText := LChunk.GetFullText;
 			if LText <> '' then
 				StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(LText) + '</div>');
 
 			// Resource
-			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+			if LHasResource then
 			begin
 				if FEmbedResources and (LResInfo.Base64Data <> '') then
 				begin
@@ -280,6 +305,15 @@ begin
 
 			StreamWriteLn(AOutput, '</div>');
 		end;
+	end;
+
+	// Trailing remote attachment hint (empty blocks at end of conversation)
+	if LPendingRemoteCount > 0 then
+	begin
+		StreamWriteLn(AOutput, '<div class="message user">');
+		StreamWriteLn(AOutput, '<div class="remote-attachments">' +
+			IntToStr(LPendingRemoteCount) + ' remote attachment(s)</div>');
+		StreamWriteLn(AOutput, '</div>');
 	end;
 
 	// Controls panel

@@ -69,10 +69,13 @@ var
 	LChunk: TGeminiChunk;
 	LText, LThinking: string;
 	LResInfo: TFormatterResourceInfo;
+	LHasResource: Boolean;
+	LPendingRemoteCount: Integer;
 	LFmt: TFormatSettings;
 	LMeta, LSummary: string;
 begin
 	LFmt := TFormatSettings.Invariant;
+	LPendingRemoteCount := 0;
 
 	// Title
 	StreamWriteLn(AOutput, '# Gemini Conversation');
@@ -152,6 +155,26 @@ begin
 		end
 		else
 		begin
+			// Pre-compute text and resource for empty block detection
+			LText := LChunk.GetFullText;
+			LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
+
+			// Skip empty display blocks (no text, no embedded resource)
+			if (LText = '') and (not LHasResource) then
+			begin
+				if LChunk.DriveImageId <> '' then
+					Inc(LPendingRemoteCount);
+				Continue;
+			end;
+
+			// Emit pending remote attachment hint
+			if LPendingRemoteCount > 0 then
+			begin
+				StreamWriteLn(AOutput, '*' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)*');
+				StreamWriteLn(AOutput);
+				LPendingRemoteCount := 0;
+			end;
+
 			// Role heading
 			case LChunk.Role of
 				grUser: StreamWriteLn(AOutput, '### User');
@@ -179,18 +202,24 @@ begin
 			end;
 
 			// Main text
-			LText := LChunk.GetFullText;
 			if LText <> '' then
 				StreamWriteLn(AOutput, LText);
 
 			// Resource image link
-			if FindResourceForChunk(AResources, LChunk.Index, LResInfo) then
+			if LHasResource then
 			begin
 				StreamWriteLn(AOutput);
 				StreamWriteLn(AOutput, '![' + TPath.GetFileName(LResInfo.FileName) + '](' + LResInfo.FileName + ')');
 			end;
 		end;
 
+		StreamWriteLn(AOutput);
+	end;
+
+	// Trailing remote attachment hint (empty blocks at end of conversation)
+	if LPendingRemoteCount > 0 then
+	begin
+		StreamWriteLn(AOutput, '*' + IntToStr(LPendingRemoteCount) + ' remote attachment(s)*');
 		StreamWriteLn(AOutput);
 	end;
 end;

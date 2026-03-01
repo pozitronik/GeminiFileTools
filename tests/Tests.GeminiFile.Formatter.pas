@@ -57,6 +57,10 @@ type
 		procedure CreateTimeZero_NotDisplayed;
 		[Test]
 		procedure ThinkingChunkCreateTime_DisplayedInTag;
+		[Test]
+		procedure EmptyUserChunk_SkippedWithRemoteHint;
+		[Test]
+		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
 	end;
 
 	[TestFixture]
@@ -93,6 +97,10 @@ type
 		procedure ThinkingChunkWithResource_InsertsImageLink;
 		[Test]
 		procedure CreateTime_DisplayedAsItalic;
+		[Test]
+		procedure EmptyUserChunk_SkippedWithRemoteHint;
+		[Test]
+		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
 	end;
 
 	[TestFixture]
@@ -137,6 +145,10 @@ type
 		procedure ControlsPanel_PresentInOutput;
 		[Test]
 		procedure ThinkingBlocks_HaveThinkingClass;
+		[Test]
+		procedure EmptyUserChunk_SkippedWithRemoteHint;
+		[Test]
+		procedure EmptyUserChunkTrailing_ProducesStandaloneHint;
 	end;
 
 implementation
@@ -325,6 +337,41 @@ begin
 	Assert.Contains(LResult, '<Thinking> 2026-02-26 00:01:02');
 end;
 
+procedure TTestGeminiTextFormatter.EmptyUserChunk_SkippedWithRemoteHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	// Empty user chunk with DriveImageId (remote attachment)
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	// Followed by non-empty user chunk
+	FChunks.Add(MakeChunk(grUser, 'Analyze this image'));
+	LResult := FormatToString('', nil);
+	// Should NOT have a bare [USER] header for the empty chunk
+	Assert.Contains(LResult, '1 remote attachment(s)');
+	Assert.Contains(LResult, 'Analyze this image');
+end;
+
+procedure TTestGeminiTextFormatter.EmptyUserChunkTrailing_ProducesStandaloneHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	// Two empty user chunks at end of conversation
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'def456';
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '2 remote attachment(s)');
+	Assert.IsFalse(LResult.Contains('[USER]'),
+		'Empty blocks should not produce role headers');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -482,6 +529,35 @@ begin
 	FChunks.Add(LChunk);
 	LResult := FormatToString('', nil);
 	Assert.Contains(LResult, '*2026-02-26 00:01:02*');
+end;
+
+procedure TTestGeminiMarkdownFormatter.EmptyUserChunk_SkippedWithRemoteHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grUser, 'Analyze this image'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '*1 remote attachment(s)*');
+	Assert.Contains(LResult, 'Analyze this image');
+end;
+
+procedure TTestGeminiMarkdownFormatter.EmptyUserChunkTrailing_ProducesStandaloneHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'def456';
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '*2 remote attachment(s)*');
 end;
 
 // ========================================================================
@@ -715,6 +791,37 @@ begin
 	FChunks.Add(MakeChunk(grModel, 'Reasoning...', 0, True));
 	LResult := FormatToString(False, '', nil);
 	Assert.Contains(LResult, '<details class="thinking">');
+end;
+
+procedure TTestGeminiHtmlFormatter.EmptyUserChunk_SkippedWithRemoteHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grUser, 'Analyze this image'));
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, 'class="remote-attachments"');
+	Assert.Contains(LResult, '1 remote attachment(s)');
+	Assert.Contains(LResult, 'Analyze this image');
+end;
+
+procedure TTestGeminiHtmlFormatter.EmptyUserChunkTrailing_ProducesStandaloneHint;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'abc123';
+	FChunks.Add(LChunk);
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'def456';
+	FChunks.Add(LChunk);
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, '2 remote attachment(s)');
+	Assert.Contains(LResult, 'class="remote-attachments"');
 end;
 
 initialization
