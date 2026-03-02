@@ -1,5 +1,5 @@
 /// <summary>
-///   Unit tests for TGeminiChunk: GetFullText, GetThinkingText, HasResource, GetResource.
+///   Unit tests for TGeminiChunk: GetFullText, GetThinkingText, TryGetResource.
 /// </summary>
 unit Tests.GeminiFile.Chunk;
 
@@ -29,17 +29,15 @@ type
     [Test]
     procedure GetThinkingText_WithParts_ConcatenatesThoughtPartsOnly;
     [Test]
-    procedure HasResource_TrueWithInlineImage;
+    procedure TryGetResource_TrueWithInlineImage;
     [Test]
-    procedure HasResource_TrueWithPartsInlineData;
+    procedure TryGetResource_TrueWithPartsInlineData;
     [Test]
-    procedure HasResource_FalseWhenNoResources;
+    procedure TryGetResource_FalseWhenNoResources;
     [Test]
-    procedure GetResource_ReturnsInlineImageFirst;
+    procedure TryGetResource_PrefersInlineImageOverParts;
     [Test]
-    procedure GetResource_FallsBackToPartsInlineData;
-    [Test]
-    procedure GetResource_ReturnsNilWhenNoResources;
+    procedure TryGetResource_FallsBackToPartsInlineData;
   end;
 
 implementation
@@ -166,52 +164,22 @@ begin
   end;
 end;
 
-procedure TTestGeminiChunk.HasResource_TrueWithInlineImage;
+procedure TTestGeminiChunk.TryGetResource_TrueWithInlineImage;
 var
   LChunk: TGeminiChunk;
+  LRes: TGeminiResource;
 begin
   LChunk := TGeminiChunk.Create;
   try
     LChunk.InlineImage := TGeminiResource.Create('image/jpeg', 'AAAA', 0);
-    Assert.IsTrue(LChunk.HasResource);
+    Assert.IsTrue(LChunk.TryGetResource(LRes));
+    Assert.AreEqual('image/jpeg', LRes.MimeType);
   finally
     LChunk.Free;
   end;
 end;
 
-procedure TTestGeminiChunk.HasResource_TrueWithPartsInlineData;
-var
-  LChunk: TGeminiChunk;
-  LPart: TGeminiPart;
-begin
-  LChunk := TGeminiChunk.Create;
-  try
-    LPart := TGeminiPart.Create;
-    LPart.InlineData := TGeminiResource.Create('image/png', 'BBBB', 0);
-    LChunk.Parts.Add(LPart);
-    Assert.IsTrue(LChunk.HasResource);
-  finally
-    LChunk.Free;
-  end;
-end;
-
-procedure TTestGeminiChunk.HasResource_FalseWhenNoResources;
-var
-  LChunk: TGeminiChunk;
-  LPart: TGeminiPart;
-begin
-  LChunk := TGeminiChunk.Create;
-  try
-    LPart := TGeminiPart.Create;
-    LPart.Text := 'Just text';
-    LChunk.Parts.Add(LPart);
-    Assert.IsFalse(LChunk.HasResource);
-  finally
-    LChunk.Free;
-  end;
-end;
-
-procedure TTestGeminiChunk.GetResource_ReturnsInlineImageFirst;
+procedure TTestGeminiChunk.TryGetResource_TrueWithPartsInlineData;
 var
   LChunk: TGeminiChunk;
   LPart: TGeminiPart;
@@ -219,48 +187,67 @@ var
 begin
   LChunk := TGeminiChunk.Create;
   try
-    LChunk.InlineImage := TGeminiResource.Create('image/jpeg', 'AAAA', 0);
-
     LPart := TGeminiPart.Create;
     LPart.InlineData := TGeminiResource.Create('image/png', 'BBBB', 0);
     LChunk.Parts.Add(LPart);
-
-    LRes := LChunk.GetResource;
-    Assert.IsNotNull(LRes);
-    Assert.AreEqual('image/jpeg', LRes.MimeType, 'Should return InlineImage, not part InlineData');
-  finally
-    LChunk.Free;
-  end;
-end;
-
-procedure TTestGeminiChunk.GetResource_FallsBackToPartsInlineData;
-var
-  LChunk: TGeminiChunk;
-  LPart: TGeminiPart;
-  LRes: TGeminiResource;
-begin
-  LChunk := TGeminiChunk.Create;
-  try
-    // No InlineImage
-    LPart := TGeminiPart.Create;
-    LPart.InlineData := TGeminiResource.Create('image/png', 'BBBB', 0);
-    LChunk.Parts.Add(LPart);
-
-    LRes := LChunk.GetResource;
-    Assert.IsNotNull(LRes);
+    Assert.IsTrue(LChunk.TryGetResource(LRes));
     Assert.AreEqual('image/png', LRes.MimeType);
   finally
     LChunk.Free;
   end;
 end;
 
-procedure TTestGeminiChunk.GetResource_ReturnsNilWhenNoResources;
+procedure TTestGeminiChunk.TryGetResource_FalseWhenNoResources;
 var
   LChunk: TGeminiChunk;
+  LPart: TGeminiPart;
+  LRes: TGeminiResource;
 begin
   LChunk := TGeminiChunk.Create;
   try
-    Assert.IsNull(LChunk.GetResource);
+    LPart := TGeminiPart.Create;
+    LPart.Text := 'Just text';
+    LChunk.Parts.Add(LPart);
+    Assert.IsFalse(LChunk.TryGetResource(LRes));
+  finally
+    LChunk.Free;
+  end;
+end;
+
+procedure TTestGeminiChunk.TryGetResource_PrefersInlineImageOverParts;
+var
+  LChunk: TGeminiChunk;
+  LPart: TGeminiPart;
+  LRes: TGeminiResource;
+begin
+  LChunk := TGeminiChunk.Create;
+  try
+    LChunk.InlineImage := TGeminiResource.Create('image/jpeg', 'AAAA', 0);
+    LPart := TGeminiPart.Create;
+    LPart.InlineData := TGeminiResource.Create('image/png', 'BBBB', 0);
+    LChunk.Parts.Add(LPart);
+
+    Assert.IsTrue(LChunk.TryGetResource(LRes));
+    Assert.AreEqual('image/jpeg', LRes.MimeType, 'Should prefer InlineImage over part InlineData');
+  finally
+    LChunk.Free;
+  end;
+end;
+
+procedure TTestGeminiChunk.TryGetResource_FallsBackToPartsInlineData;
+var
+  LChunk: TGeminiChunk;
+  LPart: TGeminiPart;
+  LRes: TGeminiResource;
+begin
+  LChunk := TGeminiChunk.Create;
+  try
+    LPart := TGeminiPart.Create;
+    LPart.InlineData := TGeminiResource.Create('image/png', 'BBBB', 0);
+    LChunk.Parts.Add(LPart);
+
+    Assert.IsTrue(LChunk.TryGetResource(LRes));
+    Assert.AreEqual('image/png', LRes.MimeType);
   finally
     LChunk.Free;
   end;

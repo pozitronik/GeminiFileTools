@@ -257,11 +257,8 @@ begin
 	LList := TList<GeminiFile.Model.TGeminiResource>.Create;
 	try
 		for LChunk in FChunks do
-		begin
-			LRes := LChunk.GetResource;
-			if LRes <> nil then
+			if LChunk.TryGetResource(LRes) then
 				LList.Add(LRes);
-		end;
 		Result := LList.ToArray;
 	finally
 		LList.Free;
@@ -271,10 +268,11 @@ end;
 function TGeminiFile.GetResourceCount: Integer;
 var
 	LChunk: GeminiFile.Model.TGeminiChunk;
+	LRes: GeminiFile.Model.TGeminiResource;
 begin
 	Result := 0;
 	for LChunk in FChunks do
-		if LChunk.HasResource then
+		if LChunk.TryGetResource(LRes) then
 			Inc(Result);
 end;
 

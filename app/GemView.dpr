@@ -220,12 +220,8 @@ begin
 				WriteLn(LText);
 
 			// Resource indicator
-			if LChunk.HasResource then
-			begin
-				LRes := LChunk.GetResource;
-				if LRes <> nil then
-					WriteLn('[IMAGE: ', LRes.MimeType, ', ~', FormatByteSize(LRes.DecodedSize), ']');
-			end;
+			if LChunk.TryGetResource(LRes) then
+				WriteLn('[IMAGE: ', LRes.MimeType, ', ~', FormatByteSize(LRes.DecodedSize), ']');
 
 			// Drive image reference
 			if LChunk.DriveImageId <> '' then

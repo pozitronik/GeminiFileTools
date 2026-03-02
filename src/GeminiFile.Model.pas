@@ -180,16 +180,12 @@ type
 		function GetThinkingText: string;
 
 		/// <summary>
-		///   Returns True if this chunk contains an embedded resource
-		///   (either via InlineImage or via parts with InlineData).
-		/// </summary>
-		function HasResource: Boolean;
-
-		/// <summary>
-		///   Returns the primary embedded resource, or nil.
+		///   Attempts to retrieve the primary embedded resource.
 		///   Checks InlineImage first, then falls back to the first InlineData in Parts.
 		/// </summary>
-		function GetResource: TGeminiResource;
+		/// <param name="AResource">Output: the resource found, or unmodified if none.</param>
+		/// <returns>True if a resource was found.</returns>
+		function TryGetResource(out AResource: TGeminiResource): Boolean;
 
 		/// <summary>Raw text content of this chunk.</summary>
 		property Text: string read FText write FText;
@@ -469,28 +465,22 @@ begin
 	end;
 end;
 
-function TGeminiChunk.HasResource: Boolean;
+function TGeminiChunk.TryGetResource(out AResource: TGeminiResource): Boolean;
 var
 	LPart: TGeminiPart;
 begin
 	if FInlineImage <> nil then
+	begin
+		AResource := FInlineImage;
 		Exit(True);
+	end;
 	for LPart in FParts do
 		if LPart.InlineData <> nil then
+		begin
+			AResource := LPart.InlineData;
 			Exit(True);
+		end;
 	Result := False;
-end;
-
-function TGeminiChunk.GetResource: TGeminiResource;
-var
-	LPart: TGeminiPart;
-begin
-	if FInlineImage <> nil then
-		Exit(FInlineImage);
-	for LPart in FParts do
-		if LPart.InlineData <> nil then
-			Exit(LPart.InlineData);
-	Result := nil;
 end;
 
 {TGeminiRunSettings}
