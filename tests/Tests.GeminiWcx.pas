@@ -1785,14 +1785,3 @@ finalization
 		TFile.Delete(TPath.Combine(GTestExeDir, 'gemini.css'));
 
 end.
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxVirtualFileList);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxReadHeader);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxProcessFile);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxProcessHtml);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxGetBaseName);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxPluginConfig);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxExportedApi);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxAnsiCompat);
-	TDUnitX.RegisterTestFixture(TTestGeminiWcxExtractSpecial);
-
-end.
