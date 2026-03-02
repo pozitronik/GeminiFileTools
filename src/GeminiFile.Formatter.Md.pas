@@ -23,31 +23,17 @@ type
 	/// </summary>
 	TGeminiMarkdownFormatter = class(TGeminiFormatterBase)
 	protected
-		procedure WriteDocumentStart(AOutput: TStream;
-			ARunSettings: TGeminiRunSettings;
-			const ASystemInstruction: string); override;
-		procedure BeginThinkingGroup(AOutput: TStream;
-			ACreateTime: TDateTime; AAnyResource: Boolean); override;
-		procedure WriteThinkingSubBlock(AOutput: TStream;
-			const AText: string; AHasResource: Boolean;
-			const AResInfo: TFormatterResourceInfo;
-			ASubIndex, ASubCount: Integer); override;
+		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); override;
+		procedure BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean); override;
+		procedure WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer); override;
 		procedure EndThinkingGroup(AOutput: TStream); override;
-		procedure BeginContentGroup(AOutput: TStream;
-			AKind: TChunkGroupKind; ACreateTime: TDateTime;
-			ATotalTokens: Integer; APendingRemoteCount: Integer); override;
+		procedure BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer); override;
 		procedure WriteContentSeparator(AOutput: TStream); override;
-		procedure WritePartThinking(AOutput: TStream;
-			const AThinking: string); override;
-		procedure WriteContentText(AOutput: TStream;
-			const AText: string); override;
-		procedure WriteContentResource(AOutput: TStream;
-			const AResInfo: TFormatterResourceInfo); override;
-		procedure WriteRemoteHint(AOutput: TStream;
-			ACount: Integer); override;
-		procedure WriteGroupSpacing(AOutput: TStream;
-			AKind: TChunkGroupKind;
-			AHadVisibleContent: Boolean); override;
+		procedure WritePartThinking(AOutput: TStream; const AThinking: string); override;
+		procedure WriteContentText(AOutput: TStream; const AText: string); override;
+		procedure WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo); override;
+		procedure WriteRemoteHint(AOutput: TStream; ACount: Integer); override;
+		procedure WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean); override;
 	end;
 
 implementation
@@ -55,16 +41,14 @@ implementation
 uses
 	GeminiFile.Formatter.Utils;
 
-{ TGeminiMarkdownFormatter }
+{TGeminiMarkdownFormatter}
 
 procedure WriteMarkdownImage(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
 	StreamWriteLn(AOutput, '![' + TPath.GetFileName(AResInfo.FileName) + '](' + AResInfo.FileName + ')');
 end;
 
-procedure TGeminiMarkdownFormatter.WriteDocumentStart(AOutput: TStream;
-	ARunSettings: TGeminiRunSettings;
-	const ASystemInstruction: string);
+procedure TGeminiMarkdownFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
 var
 	LFmt: TFormatSettings;
 	LMeta: string;
@@ -122,8 +106,7 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiMarkdownFormatter.BeginThinkingGroup(AOutput: TStream;
-	ACreateTime: TDateTime; AAnyResource: Boolean);
+procedure TGeminiMarkdownFormatter.BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean);
 var
 	LSummary: string;
 begin
@@ -138,10 +121,7 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiMarkdownFormatter.WriteThinkingSubBlock(AOutput: TStream;
-	const AText: string; AHasResource: Boolean;
-	const AResInfo: TFormatterResourceInfo;
-	ASubIndex, ASubCount: Integer);
+procedure TGeminiMarkdownFormatter.WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer);
 begin
 	if ASubIndex > 0 then
 		StreamWriteLn(AOutput);
@@ -159,9 +139,7 @@ begin
 	StreamWriteLn(AOutput, '</details>');
 end;
 
-procedure TGeminiMarkdownFormatter.BeginContentGroup(AOutput: TStream;
-	AKind: TChunkGroupKind; ACreateTime: TDateTime;
-	ATotalTokens: Integer; APendingRemoteCount: Integer);
+procedure TGeminiMarkdownFormatter.BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer);
 begin
 	if APendingRemoteCount > 0 then
 	begin
@@ -170,8 +148,10 @@ begin
 	end;
 
 	case AKind of
-		gkUser: StreamWriteLn(AOutput, '### User');
-		gkModel: StreamWriteLn(AOutput, '### Model');
+		gkUser:
+			StreamWriteLn(AOutput, '### User');
+		gkModel:
+			StreamWriteLn(AOutput, '### Model');
 	end;
 	StreamWriteLn(AOutput);
 
@@ -195,8 +175,7 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiMarkdownFormatter.WritePartThinking(AOutput: TStream;
-	const AThinking: string);
+procedure TGeminiMarkdownFormatter.WritePartThinking(AOutput: TStream; const AThinking: string);
 begin
 	StreamWriteLn(AOutput, '<details><summary>Thinking</summary>');
 	StreamWriteLn(AOutput);
@@ -206,28 +185,24 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiMarkdownFormatter.WriteContentText(AOutput: TStream;
-	const AText: string);
+procedure TGeminiMarkdownFormatter.WriteContentText(AOutput: TStream; const AText: string);
 begin
 	StreamWriteLn(AOutput, AText);
 end;
 
-procedure TGeminiMarkdownFormatter.WriteContentResource(AOutput: TStream;
-	const AResInfo: TFormatterResourceInfo);
+procedure TGeminiMarkdownFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
 	StreamWriteLn(AOutput);
 	WriteMarkdownImage(AOutput, AResInfo);
 end;
 
-procedure TGeminiMarkdownFormatter.WriteRemoteHint(AOutput: TStream;
-	ACount: Integer);
+procedure TGeminiMarkdownFormatter.WriteRemoteHint(AOutput: TStream; ACount: Integer);
 begin
 	StreamWriteLn(AOutput, '*' + IntToStr(ACount) + ' remote attachment(s)*');
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiMarkdownFormatter.WriteGroupSpacing(AOutput: TStream;
-	AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
+procedure TGeminiMarkdownFormatter.WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
 begin
 	// Markdown always emits a blank line between groups
 	StreamWriteLn(AOutput);

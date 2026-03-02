@@ -32,38 +32,22 @@ type
 		FCustomCSS: string;
 	protected
 		// -- Abstract method overrides (11) -----------------------------------
-		procedure WriteDocumentStart(AOutput: TStream;
-			ARunSettings: TGeminiRunSettings;
-			const ASystemInstruction: string); override;
-		procedure BeginThinkingGroup(AOutput: TStream;
-			ACreateTime: TDateTime; AAnyResource: Boolean); override;
-		procedure WriteThinkingSubBlock(AOutput: TStream;
-			const AText: string; AHasResource: Boolean;
-			const AResInfo: TFormatterResourceInfo;
-			ASubIndex, ASubCount: Integer); override;
+		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); override;
+		procedure BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean); override;
+		procedure WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer); override;
 		procedure EndThinkingGroup(AOutput: TStream); override;
-		procedure BeginContentGroup(AOutput: TStream;
-			AKind: TChunkGroupKind; ACreateTime: TDateTime;
-			ATotalTokens: Integer; APendingRemoteCount: Integer); override;
+		procedure BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer); override;
 		procedure WriteContentSeparator(AOutput: TStream); override;
-		procedure WritePartThinking(AOutput: TStream;
-			const AThinking: string); override;
-		procedure WriteContentText(AOutput: TStream;
-			const AText: string); override;
-		procedure WriteContentResource(AOutput: TStream;
-			const AResInfo: TFormatterResourceInfo); override;
-		procedure WriteRemoteHint(AOutput: TStream;
-			ACount: Integer); override;
-		procedure WriteGroupSpacing(AOutput: TStream;
-			AKind: TChunkGroupKind;
-			AHadVisibleContent: Boolean); override;
+		procedure WritePartThinking(AOutput: TStream; const AThinking: string); override;
+		procedure WriteContentText(AOutput: TStream; const AText: string); override;
+		procedure WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo); override;
+		procedure WriteRemoteHint(AOutput: TStream; ACount: Integer); override;
+		procedure WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean); override;
 		// -- Virtual method overrides (4) -------------------------------------
 		procedure WriteDocumentEnd(AOutput: TStream); override;
 		procedure EndContentGroup(AOutput: TStream); override;
-		procedure BeginContentSubBlock(AOutput: TStream;
-			AUseCombinedLayout: Boolean); override;
-		procedure EndContentSubBlock(AOutput: TStream;
-			AUseCombinedLayout: Boolean); override;
+		procedure BeginContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); override;
+		procedure EndContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); override;
 	public
 		/// <summary>Creates an HTML formatter.</summary>
 		/// <param name="AEmbedResources">True to embed base64 images, False for external links.</param>
@@ -84,68 +68,26 @@ uses
 	GeminiFile.Markdown;
 
 const
-	CSS_STYLES =
-		'* { box-sizing: border-box; }' + CRLF +
-		'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' +
-		' max-width: 900px; margin: 0 auto; padding: 20px; background: #fafafa; color: #333; line-height: 1.6; }' + CRLF +
-		'h1 { margin: 0 0 10px; }' + CRLF +
-		'.meta { color: #666; font-size: 0.9em; margin-bottom: 20px; }' + CRLF +
-		'.section-title { font-size: 1.2em; font-weight: bold; margin: 20px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }' + CRLF +
-		'.system-instruction { background: #fff8e1; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 10px 0 20px; white-space: pre-wrap; word-wrap: break-word; }' + CRLF +
-		'hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }' + CRLF +
-		'.message { margin: 12px 0; padding: 12px 16px; border-radius: 8px; }' + CRLF +
-		'.user { background: #e3f2fd; border-left: 4px solid #1976d2; }' + CRLF +
-		'.model { background: #fff; border-left: 4px solid #388e3c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }' + CRLF +
-		'.role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; margin-bottom: 6px; }' + CRLF +
-		'.user .role { color: #1976d2; }' + CRLF +
-		'.model .role { color: #388e3c; }' + CRLF +
-		'.tokens { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
-		'.content { white-space: pre-wrap; word-wrap: break-word; }' + CRLF +
-		'details { margin: 8px 0; background: #f5f5f5; border-radius: 4px; padding: 8px 12px; }' + CRLF +
-		'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
-		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF +
-		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF +
-		'.remote-attachments { color: #888; font-size: 0.85em; font-style: italic; margin: 4px 0; }' + CRLF +
-		'.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
-		'body.full-width { max-width: none; }' + CRLF +
-		'#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' +
-		' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' +
-		' display: flex; gap: 6px; }' + CRLF +
-		'#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' +
-		' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' + CRLF +
-		'#controls button:hover { background: #e0e0e0; }' + CRLF +
-		'body.md .content { white-space: normal; }' + CRLF +
-		'body.md .content p { margin: 0.4em 0; }' + CRLF +
-		'body.md .content p:first-child { margin-top: 0; }' + CRLF +
-		'body.md .content p:last-child { margin-bottom: 0; }' + CRLF +
-		'body.md .content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px;' +
-		' border-radius: 6px; overflow-x: auto; white-space: pre; font-family: Consolas, Monaco, monospace;' +
-		' margin: 8px 0; line-height: 1.4; }' + CRLF +
-		'body.md .content pre code { background: none; padding: 0; border-radius: 0; color: inherit; }' + CRLF +
-		'body.md .content code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px;' +
-		' font-family: Consolas, Monaco, monospace; font-size: 0.9em; }' + CRLF +
-		'.combined-part { border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 8px; }' + CRLF +
-		'.combined-part:first-child { border-top: none; padding-top: 0; margin-top: 0; }';
+	CSS_STYLES = '* { box-sizing: border-box; }' + CRLF + 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' + ' max-width: 900px; margin: 0 auto; padding: 20px; background: #fafafa; color: #333; line-height: 1.6; }' + CRLF + 'h1 { margin: 0 0 10px; }' + CRLF + '.meta { color: #666; font-size: 0.9em; margin-bottom: 20px; }' + CRLF + '.section-title { font-size: 1.2em; font-weight: bold; margin: 20px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }' + CRLF + '.system-instruction { background: #fff8e1; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 10px 0 20px; white-space: pre-wrap; word-wrap: break-word; }' + CRLF + 'hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }' + CRLF +
+		'.message { margin: 12px 0; padding: 12px 16px; border-radius: 8px; }' + CRLF + '.user { background: #e3f2fd; border-left: 4px solid #1976d2; }' + CRLF + '.model { background: #fff; border-left: 4px solid #388e3c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }' + CRLF + '.role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; margin-bottom: 6px; }' + CRLF + '.user .role { color: #1976d2; }' + CRLF + '.model .role { color: #388e3c; }' + CRLF + '.tokens { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF + '.content { white-space: pre-wrap; word-wrap: break-word; }' + CRLF + 'details { margin: 8px 0; background: #f5f5f5; border-radius: 4px; padding: 8px 12px; }' + CRLF + 'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
+		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF + '.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF + '.remote-attachments { color: #888; font-size: 0.85em; font-style: italic; margin: 4px 0; }' + CRLF + '.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF + 'body.full-width { max-width: none; }' + CRLF + '#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' + ' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' + ' display: flex; gap: 6px; }' + CRLF + '#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' + ' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' +
+		CRLF + '#controls button:hover { background: #e0e0e0; }' + CRLF + 'body.md .content { white-space: normal; }' + CRLF + 'body.md .content p { margin: 0.4em 0; }' + CRLF + 'body.md .content p:first-child { margin-top: 0; }' + CRLF + 'body.md .content p:last-child { margin-bottom: 0; }' + CRLF + 'body.md .content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px;' + ' border-radius: 6px; overflow-x: auto; white-space: pre; font-family: Consolas, Monaco, monospace;' + ' margin: 8px 0; line-height: 1.4; }' + CRLF + 'body.md .content pre code { background: none; padding: 0; border-radius: 0; color: inherit; }' + CRLF + 'body.md .content code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px;' + ' font-family: Consolas, Monaco, monospace; font-size: 0.9em; }' + CRLF +
+		'.combined-part { border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 8px; }' + CRLF + '.combined-part:first-child { border-top: none; padding-top: 0; margin-top: 0; }';
 
-{ TGeminiHtmlFormatter }
+	{TGeminiHtmlFormatter}
 
-/// <summary>Writes an img tag (embedded or external) plus resource-info div.</summary>
-procedure WriteHtmlResource(AOutput: TStream; AEmbedResources: Boolean;
-	const AResInfo: TFormatterResourceInfo);
+	/// <summary>Writes an img tag (embedded or external) plus resource-info div.</summary>
+procedure WriteHtmlResource(AOutput: TStream; AEmbedResources: Boolean; const AResInfo: TFormatterResourceInfo);
 begin
 	if AEmbedResources and (AResInfo.Base64Data <> '') then
 	begin
-		StreamWrite(AOutput, '<img class="resource-img" src="data:' +
-			HtmlEscape(AResInfo.MimeType) + ';base64,');
+		StreamWrite(AOutput, '<img class="resource-img" src="data:' + HtmlEscape(AResInfo.MimeType) + ';base64,');
 		StreamWrite(AOutput, AResInfo.Base64Data);
 		StreamWriteLn(AOutput, '" />');
 	end
 	else
-		StreamWriteLn(AOutput, '<img class="resource-img" src="' +
-			HtmlEscape(AResInfo.FileName) + '" />');
-	StreamWriteLn(AOutput, '<div class="resource-info">' +
-		HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) +
-		', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
+		StreamWriteLn(AOutput, '<img class="resource-img" src="' + HtmlEscape(AResInfo.FileName) + '" />');
+	StreamWriteLn(AOutput, '<div class="resource-info">' + HtmlEscape(AResInfo.FileName) + ' (' + HtmlEscape(AResInfo.MimeType) + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')</div>');
 end;
 
 constructor TGeminiHtmlFormatter.Create(AEmbedResources: Boolean; const ACustomCSS: string);
@@ -156,9 +98,7 @@ begin
 	FCustomCSS := ACustomCSS;
 end;
 
-procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream;
-	ARunSettings: TGeminiRunSettings;
-	const ASystemInstruction: string);
+procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
 var
 	LFmt: TFormatSettings;
 	LBodyClasses: string;
@@ -197,11 +137,9 @@ begin
 	if ARunSettings.Model <> '' then
 		StreamWrite(AOutput, '<strong>Model:</strong> ' + HtmlEscape(ARunSettings.Model));
 	if not IsNaN(ARunSettings.Temperature) then
-		StreamWrite(AOutput, ' | <strong>Temperature:</strong> ' +
-			FormatFloat('0.0#', ARunSettings.Temperature, LFmt));
+		StreamWrite(AOutput, ' | <strong>Temperature:</strong> ' + FormatFloat('0.0#', ARunSettings.Temperature, LFmt));
 	if not IsNaN(ARunSettings.TopP) then
-		StreamWrite(AOutput, ' | <strong>TopP:</strong> ' +
-			FormatFloat('0.0#', ARunSettings.TopP, LFmt));
+		StreamWrite(AOutput, ' | <strong>TopP:</strong> ' + FormatFloat('0.0#', ARunSettings.TopP, LFmt));
 	if ARunSettings.TopK >= 0 then
 		StreamWrite(AOutput, ' | <strong>TopK:</strong> ' + IntToStr(ARunSettings.TopK));
 	if ARunSettings.MaxOutputTokens >= 0 then
@@ -212,16 +150,14 @@ begin
 	if ASystemInstruction <> '' then
 	begin
 		StreamWriteLn(AOutput, '<div class="section-title">System Instruction</div>');
-		StreamWriteLn(AOutput, '<div class="system-instruction">' +
-			HtmlEscape(ASystemInstruction) + '</div>');
+		StreamWriteLn(AOutput, '<div class="system-instruction">' + HtmlEscape(ASystemInstruction) + '</div>');
 	end;
 
 	StreamWriteLn(AOutput, '<hr>');
 	StreamWriteLn(AOutput, '<div class="section-title">Conversation</div>');
 end;
 
-procedure TGeminiHtmlFormatter.BeginThinkingGroup(AOutput: TStream;
-	ACreateTime: TDateTime; AAnyResource: Boolean);
+procedure TGeminiHtmlFormatter.BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean);
 var
 	LSummary: string;
 begin
@@ -240,10 +176,7 @@ begin
 	StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
 end;
 
-procedure TGeminiHtmlFormatter.WriteThinkingSubBlock(AOutput: TStream;
-	const AText: string; AHasResource: Boolean;
-	const AResInfo: TFormatterResourceInfo;
-	ASubIndex, ASubCount: Integer);
+procedure TGeminiHtmlFormatter.WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer);
 var
 	LUseCombinedParts: Boolean;
 begin
@@ -268,23 +201,21 @@ begin
 	StreamWriteLn(AOutput, '</details>');
 end;
 
-procedure TGeminiHtmlFormatter.BeginContentGroup(AOutput: TStream;
-	AKind: TChunkGroupKind; ACreateTime: TDateTime;
-	ATotalTokens: Integer; APendingRemoteCount: Integer);
+procedure TGeminiHtmlFormatter.BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer);
 var
 	LRoleClass, LRoleLabel: string;
 begin
 	case AKind of
 		gkUser:
-		begin
-			LRoleClass := 'user';
-			LRoleLabel := 'User';
-		end;
-	else
-		begin
-			LRoleClass := 'model';
-			LRoleLabel := 'Model';
-		end;
+			begin
+				LRoleClass := 'user';
+				LRoleLabel := 'User';
+			end;
+		else
+			begin
+				LRoleClass := 'model';
+				LRoleLabel := 'Model';
+			end;
 	end;
 
 	StreamWriteLn(AOutput, '<div class="message ' + LRoleClass + '">');
@@ -292,19 +223,14 @@ begin
 	// Role label with optional timestamp and token count
 	StreamWrite(AOutput, '<div class="role">' + LRoleLabel);
 	if ACreateTime > 0 then
-		StreamWrite(AOutput, ' <span class="time">' +
-			HtmlEscape(FormatCreateTime(ACreateTime)) + '</span>');
+		StreamWrite(AOutput, ' <span class="time">' + HtmlEscape(FormatCreateTime(ACreateTime)) + '</span>');
 	if ATotalTokens > 0 then
-		StreamWrite(AOutput, ' <span class="tokens">(' +
-			IntToStr(ATotalTokens) + ' tokens)</span>');
+		StreamWrite(AOutput, ' <span class="tokens">(' + IntToStr(ATotalTokens) + ' tokens)</span>');
 	StreamWriteLn(AOutput, '</div>');
 
 	// Remote attachment hint (inside the message container, after role label)
 	if APendingRemoteCount > 0 then
-		StreamWriteLn(AOutput, '<div class="remote-attachments" title="' +
-			IntToStr(APendingRemoteCount) +
-			' remote attachment(s) uploaded before this message">' +
-			IntToStr(APendingRemoteCount) + ' remote attachment(s)</div>');
+		StreamWriteLn(AOutput, '<div class="remote-attachments" title="' + IntToStr(APendingRemoteCount) + ' remote attachment(s) uploaded before this message">' + IntToStr(APendingRemoteCount) + ' remote attachment(s)</div>');
 end;
 
 procedure TGeminiHtmlFormatter.WriteContentSeparator(AOutput: TStream);
@@ -312,8 +238,7 @@ begin
 	// HTML uses combined-part divs for sub-block separation, no explicit separator
 end;
 
-procedure TGeminiHtmlFormatter.WritePartThinking(AOutput: TStream;
-	const AThinking: string);
+procedure TGeminiHtmlFormatter.WritePartThinking(AOutput: TStream; const AThinking: string);
 begin
 	if FDefaultExpandThinking then
 		StreamWriteLn(AOutput, '<details class="thinking" open>')
@@ -327,8 +252,7 @@ begin
 	StreamWriteLn(AOutput, '</details>');
 end;
 
-procedure TGeminiHtmlFormatter.WriteContentText(AOutput: TStream;
-	const AText: string);
+procedure TGeminiHtmlFormatter.WriteContentText(AOutput: TStream; const AText: string);
 begin
 	if FRenderMarkdown then
 		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
@@ -336,23 +260,19 @@ begin
 		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
 end;
 
-procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream;
-	const AResInfo: TFormatterResourceInfo);
+procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
 	WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
 end;
 
-procedure TGeminiHtmlFormatter.WriteRemoteHint(AOutput: TStream;
-	ACount: Integer);
+procedure TGeminiHtmlFormatter.WriteRemoteHint(AOutput: TStream; ACount: Integer);
 begin
 	StreamWriteLn(AOutput, '<div class="message user">');
-	StreamWriteLn(AOutput, '<div class="remote-attachments">' +
-		IntToStr(ACount) + ' remote attachment(s)</div>');
+	StreamWriteLn(AOutput, '<div class="remote-attachments">' + IntToStr(ACount) + ' remote attachment(s)</div>');
 	StreamWriteLn(AOutput, '</div>');
 end;
 
-procedure TGeminiHtmlFormatter.WriteGroupSpacing(AOutput: TStream;
-	AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
+procedure TGeminiHtmlFormatter.WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
 begin
 	// HTML uses CSS margins for spacing, no blank lines needed
 end;
@@ -389,15 +309,13 @@ begin
 	StreamWriteLn(AOutput, '</div>');
 end;
 
-procedure TGeminiHtmlFormatter.BeginContentSubBlock(AOutput: TStream;
-	AUseCombinedLayout: Boolean);
+procedure TGeminiHtmlFormatter.BeginContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean);
 begin
 	if AUseCombinedLayout then
 		StreamWriteLn(AOutput, '<div class="combined-part">');
 end;
 
-procedure TGeminiHtmlFormatter.EndContentSubBlock(AOutput: TStream;
-	AUseCombinedLayout: Boolean);
+procedure TGeminiHtmlFormatter.EndContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean);
 begin
 	if AUseCombinedLayout then
 		StreamWriteLn(AOutput, '</div>');

@@ -32,13 +32,13 @@ type
 		TotalTokenCount: Integer;
 	end;
 
-/// <summary>
-///   Determines the grouping kind of a single chunk.
-///   Thinking is keyed on IsThought (always model in practice),
-///   otherwise determined by Role.
-/// </summary>
-/// <param name="AChunk">Chunk to classify.</param>
-/// <returns>The chunk's group kind.</returns>
+	/// <summary>
+	///   Determines the grouping kind of a single chunk.
+	///   Thinking is keyed on IsThought (always model in practice),
+	///   otherwise determined by Role.
+	/// </summary>
+	/// <param name="AChunk">Chunk to classify.</param>
+	/// <returns>The chunk's group kind.</returns>
 function GetChunkGroupKind(AChunk: TGeminiChunk): TChunkGroupKind;
 
 /// <summary>
@@ -49,8 +49,7 @@ function GetChunkGroupKind(AChunk: TGeminiChunk): TChunkGroupKind;
 /// <param name="AChunks">Ordered list of conversation chunks.</param>
 /// <param name="ACombine">Whether to merge consecutive same-kind chunks.</param>
 /// <returns>Array of chunk groups.</returns>
-function GroupConsecutiveChunks(AChunks: TObjectList<TGeminiChunk>;
-	ACombine: Boolean): TArray<TChunkGroup>;
+function GroupConsecutiveChunks(AChunks: TObjectList<TGeminiChunk>; ACombine: Boolean): TArray<TChunkGroup>;
 
 implementation
 
@@ -60,14 +59,14 @@ begin
 		Result := gkThinking
 	else
 		case AChunk.Role of
-			grUser: Result := gkUser;
-		else
-			Result := gkModel;
+			grUser:
+				Result := gkUser;
+			else
+				Result := gkModel;
 		end;
 end;
 
-function GroupConsecutiveChunks(AChunks: TObjectList<TGeminiChunk>;
-	ACombine: Boolean): TArray<TChunkGroup>;
+function GroupConsecutiveChunks(AChunks: TObjectList<TGeminiChunk>; ACombine: Boolean): TArray<TChunkGroup>;
 var
 	LGroups: TList<TChunkGroup>;
 	LGroup: TChunkGroup;
@@ -91,11 +90,9 @@ begin
 				if (LGroup.FirstCreateTime = 0) and (LChunk.CreateTime <> 0) then
 					LGroup.FirstCreateTime := LChunk.CreateTime;
 				LGroups[LGroups.Count - 1] := LGroup;
-			end
-			else
-			begin
+			end else begin
 				// Start new group
-				LGroup := Default(TChunkGroup);
+				LGroup := Default (TChunkGroup);
 				LGroup.Kind := LKind;
 				LGroup.Chunks := [LChunk];
 				LGroup.FirstCreateTime := LChunk.CreateTime;

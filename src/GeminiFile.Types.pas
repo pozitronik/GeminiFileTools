@@ -77,8 +77,7 @@ function FormatByteSize(ASize: Int64): string;
 /// <param name="AChunkIndex">Chunk index to match.</param>
 /// <param name="AInfo">Output: matched resource info record.</param>
 /// <returns>True if a matching resource was found.</returns>
-function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
-	AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
+function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>; AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
 
 /// <summary>
 ///   Formats a TDateTime as 'YYYY-MM-DD HH:MM:SS' for display in formatters.
@@ -140,8 +139,7 @@ begin
 		Result := '.bin';
 end;
 
-function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>;
-	AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
+function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>; AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
 var
 	I: Integer;
 begin

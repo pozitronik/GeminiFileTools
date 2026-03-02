@@ -23,31 +23,17 @@ type
 	/// </summary>
 	TGeminiTextFormatter = class(TGeminiFormatterBase)
 	protected
-		procedure WriteDocumentStart(AOutput: TStream;
-			ARunSettings: TGeminiRunSettings;
-			const ASystemInstruction: string); override;
-		procedure BeginThinkingGroup(AOutput: TStream;
-			ACreateTime: TDateTime; AAnyResource: Boolean); override;
-		procedure WriteThinkingSubBlock(AOutput: TStream;
-			const AText: string; AHasResource: Boolean;
-			const AResInfo: TFormatterResourceInfo;
-			ASubIndex, ASubCount: Integer); override;
+		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); override;
+		procedure BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean); override;
+		procedure WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer); override;
 		procedure EndThinkingGroup(AOutput: TStream); override;
-		procedure BeginContentGroup(AOutput: TStream;
-			AKind: TChunkGroupKind; ACreateTime: TDateTime;
-			ATotalTokens: Integer; APendingRemoteCount: Integer); override;
+		procedure BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer); override;
 		procedure WriteContentSeparator(AOutput: TStream); override;
-		procedure WritePartThinking(AOutput: TStream;
-			const AThinking: string); override;
-		procedure WriteContentText(AOutput: TStream;
-			const AText: string); override;
-		procedure WriteContentResource(AOutput: TStream;
-			const AResInfo: TFormatterResourceInfo); override;
-		procedure WriteRemoteHint(AOutput: TStream;
-			ACount: Integer); override;
-		procedure WriteGroupSpacing(AOutput: TStream;
-			AKind: TChunkGroupKind;
-			AHadVisibleContent: Boolean); override;
+		procedure WritePartThinking(AOutput: TStream; const AThinking: string); override;
+		procedure WriteContentText(AOutput: TStream; const AText: string); override;
+		procedure WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo); override;
+		procedure WriteRemoteHint(AOutput: TStream; ACount: Integer); override;
+		procedure WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean); override;
 	end;
 
 implementation
@@ -55,11 +41,9 @@ implementation
 uses
 	GeminiFile.Formatter.Utils;
 
-{ TGeminiTextFormatter }
+{TGeminiTextFormatter}
 
-procedure TGeminiTextFormatter.WriteDocumentStart(AOutput: TStream;
-	ARunSettings: TGeminiRunSettings;
-	const ASystemInstruction: string);
+procedure TGeminiTextFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
 var
 	LFmt: TFormatSettings;
 begin
@@ -89,8 +73,7 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiTextFormatter.BeginThinkingGroup(AOutput: TStream;
-	ACreateTime: TDateTime; AAnyResource: Boolean);
+procedure TGeminiTextFormatter.BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean);
 begin
 	if ACreateTime > 0 then
 		StreamWriteLn(AOutput, '<Thinking> ' + FormatCreateTime(ACreateTime))
@@ -98,17 +81,13 @@ begin
 		StreamWriteLn(AOutput, '<Thinking>');
 end;
 
-procedure TGeminiTextFormatter.WriteThinkingSubBlock(AOutput: TStream;
-	const AText: string; AHasResource: Boolean;
-	const AResInfo: TFormatterResourceInfo;
-	ASubIndex, ASubCount: Integer);
+procedure TGeminiTextFormatter.WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer);
 begin
 	if ASubIndex > 0 then
 		StreamWriteLn(AOutput, '- - -');
 	StreamWriteLn(AOutput, AText);
 	if AHasResource then
-		StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName +
-			' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
+		StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName + ' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
 end;
 
 procedure TGeminiTextFormatter.EndThinkingGroup(AOutput: TStream);
@@ -116,9 +95,7 @@ begin
 	StreamWriteLn(AOutput, '</Thinking>');
 end;
 
-procedure TGeminiTextFormatter.BeginContentGroup(AOutput: TStream;
-	AKind: TChunkGroupKind; ACreateTime: TDateTime;
-	ATotalTokens: Integer; APendingRemoteCount: Integer);
+procedure TGeminiTextFormatter.BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer);
 begin
 	if APendingRemoteCount > 0 then
 	begin
@@ -127,8 +104,10 @@ begin
 	end;
 
 	case AKind of
-		gkUser: StreamWrite(AOutput, '[USER]');
-		gkModel: StreamWrite(AOutput, '[MODEL]');
+		gkUser:
+			StreamWrite(AOutput, '[USER]');
+		gkModel:
+			StreamWrite(AOutput, '[MODEL]');
 	end;
 	if ACreateTime > 0 then
 		StreamWrite(AOutput, ' ' + FormatCreateTime(ACreateTime));
@@ -142,8 +121,7 @@ begin
 	StreamWriteLn(AOutput, '- - -');
 end;
 
-procedure TGeminiTextFormatter.WritePartThinking(AOutput: TStream;
-	const AThinking: string);
+procedure TGeminiTextFormatter.WritePartThinking(AOutput: TStream; const AThinking: string);
 begin
 	StreamWriteLn(AOutput, '<Thinking>');
 	StreamWriteLn(AOutput, AThinking);
@@ -151,28 +129,23 @@ begin
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiTextFormatter.WriteContentText(AOutput: TStream;
-	const AText: string);
+procedure TGeminiTextFormatter.WriteContentText(AOutput: TStream; const AText: string);
 begin
 	StreamWriteLn(AOutput, AText);
 end;
 
-procedure TGeminiTextFormatter.WriteContentResource(AOutput: TStream;
-	const AResInfo: TFormatterResourceInfo);
+procedure TGeminiTextFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
-	StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName +
-		' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
+	StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName + ' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
 end;
 
-procedure TGeminiTextFormatter.WriteRemoteHint(AOutput: TStream;
-	ACount: Integer);
+procedure TGeminiTextFormatter.WriteRemoteHint(AOutput: TStream; ACount: Integer);
 begin
 	StreamWriteLn(AOutput, '[' + IntToStr(ACount) + ' remote attachment(s)]');
 	StreamWriteLn(AOutput);
 end;
 
-procedure TGeminiTextFormatter.WriteGroupSpacing(AOutput: TStream;
-	AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
+procedure TGeminiTextFormatter.WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean);
 begin
 	if (AKind = gkThinking) or AHadVisibleContent then
 		StreamWriteLn(AOutput);

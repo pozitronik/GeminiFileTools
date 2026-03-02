@@ -24,7 +24,7 @@ type
 	///   Allows substitution of parsing strategy (DIP).
 	/// </summary>
 	IGeminiFileParser = interface
-		['{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}']
+		['{52E85D46-D21B-4AF1-AAD5-94F07DB87523}']
 		/// <summary>
 		///   Parses a stream containing a Gemini conversation JSON file.
 		///   Populates the provided data record with parsed results.

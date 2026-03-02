@@ -21,7 +21,7 @@ type
 	///   Allows substitution of extraction strategy (DIP).
 	/// </summary>
 	IGeminiResourceExtractor = interface
-		['{B2C3D4E5-F6A7-8901-BCDE-F12345678901}']
+		['{09E7489E-6111-4484-BBE3-4DD505607581}']
 		/// <summary>
 		///   Extracts all provided resources to files in the specified directory.
 		///   Files are named prefix_NNN.ext where NNN is a zero-padded index.

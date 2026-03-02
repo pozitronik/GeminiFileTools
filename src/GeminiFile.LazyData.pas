@@ -18,29 +18,29 @@ type
 	///   Offsets point to the content between the opening and closing quotes.
 	/// </summary>
 	TBase64Location = record
-		ByteOffset: Int64;   // position in file where base64 content starts (after opening quote)
-		ByteLength: Int64;   // byte count of base64 content (excluding quotes)
+		ByteOffset: Int64; // position in file where base64 content starts (after opening quote)
+		ByteLength: Int64; // byte count of base64 content (excluding quotes)
 	end;
 
 	/// <summary>
 	///   Result of pre-scanning a Gemini file: stripped JSON bytes + location map.
 	/// </summary>
 	TPreScanResult = record
-		StrippedJsonBytes: TBytes;             // UTF-8 bytes with base64 replaced by __LAZY:N
-		Locations: TArray<TBase64Location>;    // indexed by placeholder N
+		StrippedJsonBytes: TBytes; // UTF-8 bytes with base64 replaced by __LAZY:N
+		Locations: TArray<TBase64Location>; // indexed by placeholder N
 	end;
 
 	/// <summary>Raised when lazy loading of base64 data fails.</summary>
 	ELazyLoadError = class(Exception);
 
-/// <summary>
-///   Pre-scans raw file bytes to find "data" key-value pairs and replaces
-///   large base64 string values with "__LAZY:N" placeholders.
-///   Returns the stripped JSON as UTF-8 bytes and a map of original byte locations.
-/// </summary>
-/// <param name="ABytes">Raw file bytes (UTF-8 encoded JSON).</param>
-/// <param name="AThreshold">Minimum byte length of a "data" value to strip. Default 1024.</param>
-/// <returns>Pre-scan result with stripped JSON bytes and location array.</returns>
+	/// <summary>
+	///   Pre-scans raw file bytes to find "data" key-value pairs and replaces
+	///   large base64 string values with "__LAZY:N" placeholders.
+	///   Returns the stripped JSON as UTF-8 bytes and a map of original byte locations.
+	/// </summary>
+	/// <param name="ABytes">Raw file bytes (UTF-8 encoded JSON).</param>
+	/// <param name="AThreshold">Minimum byte length of a "data" value to strip. Default 1024.</param>
+	/// <returns>Pre-scan result with stripped JSON bytes and location array.</returns>
 function PreScanGeminiFile(const ABytes: TBytes; AThreshold: Integer = 1024): TPreScanResult;
 
 /// <summary>
@@ -86,11 +86,11 @@ var
 			LOut.WriteBuffer(ABytes[LPos], LCount);
 	end;
 
-	/// <summary>
-	///   Scans forward from the current position to find the end of a JSON string.
-	///   Handles backslash escapes. Returns the index of the closing quote,
-	///   or -1 if no closing quote is found.
-	/// </summary>
+/// <summary>
+///   Scans forward from the current position to find the end of a JSON string.
+///   Handles backslash escapes. Returns the index of the closing quote,
+///   or -1 if no closing quote is found.
+/// </summary>
 	function FindStringEnd(AFrom: Integer): Integer;
 	var
 		LI: Integer;
@@ -110,20 +110,16 @@ var
 		Result := -1;
 	end;
 
-	/// <summary>
-	///   Checks if bytes at [AStart..AEnd) represent the string "data".
-	///   AStart is the byte after the opening quote, AEnd is the closing quote.
-	/// </summary>
+/// <summary>
+///   Checks if bytes at [AStart..AEnd) represent the string "data".
+///   AStart is the byte after the opening quote, AEnd is the closing quote.
+/// </summary>
 	function IsDataKey(AStart, AEnd: Integer): Boolean;
 	begin
-		Result := (AEnd - AStart = 4) and
-			(ABytes[AStart] = Ord('d')) and
-			(ABytes[AStart + 1] = Ord('a')) and
-			(ABytes[AStart + 2] = Ord('t')) and
-			(ABytes[AStart + 3] = Ord('a'));
+		Result := (AEnd - AStart = 4) and (ABytes[AStart] = Ord('d')) and (ABytes[AStart + 1] = Ord('a')) and (ABytes[AStart + 2] = Ord('t')) and (ABytes[AStart + 3] = Ord('a'));
 	end;
 
-	/// <summary>Skips ASCII whitespace bytes from the given position.</summary>
+/// <summary>Skips ASCII whitespace bytes from the given position.</summary>
 	function SkipWhitespace(AFrom: Integer): Integer;
 	begin
 		Result := AFrom;
@@ -261,9 +257,7 @@ begin
 		LStream := TFileStream.Create(AFilePath, fmOpenRead or fmShareDenyNone);
 		try
 			if ALocation.ByteOffset + ALocation.ByteLength > LStream.Size then
-				raise ELazyLoadError.CreateFmt(
-					'Lazy load failed: offset %d + length %d exceeds file size %d',
-					[ALocation.ByteOffset, ALocation.ByteLength, LStream.Size]);
+				raise ELazyLoadError.CreateFmt('Lazy load failed: offset %d + length %d exceeds file size %d', [ALocation.ByteOffset, ALocation.ByteLength, LStream.Size]);
 
 			LStream.Position := ALocation.ByteOffset;
 			SetLength(LBytes, ALocation.ByteLength);

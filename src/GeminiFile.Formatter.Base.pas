@@ -32,13 +32,10 @@ type
 		// -- Abstract methods (11) -- every formatter must override -----------
 
 		/// <summary>Writes document header, metadata, system instruction, and conversation heading.</summary>
-		procedure WriteDocumentStart(AOutput: TStream;
-			ARunSettings: TGeminiRunSettings;
-			const ASystemInstruction: string); virtual; abstract;
+		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); virtual; abstract;
 
 		/// <summary>Opens a thinking group (header/summary with optional timestamp and resource hint).</summary>
-		procedure BeginThinkingGroup(AOutput: TStream;
-			ACreateTime: TDateTime; AAnyResource: Boolean); virtual; abstract;
+		procedure BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean); virtual; abstract;
 
 		/// <summary>Writes one sub-block inside a thinking group.</summary>
 		/// <param name="AText">Thinking text (already extracted, with fallback to main text).</param>
@@ -46,10 +43,7 @@ type
 		/// <param name="AResInfo">Resource info (valid only when AHasResource is True).</param>
 		/// <param name="ASubIndex">Zero-based index of the sub-block within the thinking group.</param>
 		/// <param name="ASubCount">Total number of sub-blocks in the thinking group.</param>
-		procedure WriteThinkingSubBlock(AOutput: TStream;
-			const AText: string; AHasResource: Boolean;
-			const AResInfo: TFormatterResourceInfo;
-			ASubIndex, ASubCount: Integer); virtual; abstract;
+		procedure WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer); virtual; abstract;
 
 		/// <summary>Closes a thinking group (footer tag/element).</summary>
 		procedure EndThinkingGroup(AOutput: TStream); virtual; abstract;
@@ -59,35 +53,27 @@ type
 		/// <param name="ACreateTime">First non-zero timestamp in the group.</param>
 		/// <param name="ATotalTokens">Sum of token counts across group chunks.</param>
 		/// <param name="APendingRemoteCount">Number of skipped remote attachments preceding this group.</param>
-		procedure BeginContentGroup(AOutput: TStream;
-			AKind: TChunkGroupKind; ACreateTime: TDateTime;
-			ATotalTokens: Integer; APendingRemoteCount: Integer); virtual; abstract;
+		procedure BeginContentGroup(AOutput: TStream; AKind: TChunkGroupKind; ACreateTime: TDateTime; ATotalTokens: Integer; APendingRemoteCount: Integer); virtual; abstract;
 
 		/// <summary>Writes a separator between visible sub-blocks within a content group.</summary>
 		procedure WriteContentSeparator(AOutput: TStream); virtual; abstract;
 
 		/// <summary>Writes part-level thinking text within a content sub-block.</summary>
-		procedure WritePartThinking(AOutput: TStream;
-			const AThinking: string); virtual; abstract;
+		procedure WritePartThinking(AOutput: TStream; const AThinking: string); virtual; abstract;
 
 		/// <summary>Writes the main text content of a sub-block.</summary>
-		procedure WriteContentText(AOutput: TStream;
-			const AText: string); virtual; abstract;
+		procedure WriteContentText(AOutput: TStream; const AText: string); virtual; abstract;
 
 		/// <summary>Writes a resource indicator/image for a content sub-block.</summary>
-		procedure WriteContentResource(AOutput: TStream;
-			const AResInfo: TFormatterResourceInfo); virtual; abstract;
+		procedure WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo); virtual; abstract;
 
 		/// <summary>Writes a trailing remote attachment hint (for skipped blocks at conversation end).</summary>
-		procedure WriteRemoteHint(AOutput: TStream;
-			ACount: Integer); virtual; abstract;
+		procedure WriteRemoteHint(AOutput: TStream; ACount: Integer); virtual; abstract;
 
 		/// <summary>Writes spacing between groups (blank lines, etc.).</summary>
 		/// <param name="AKind">The kind of group that just ended.</param>
 		/// <param name="AHadVisibleContent">Whether the group produced any visible output.</param>
-		procedure WriteGroupSpacing(AOutput: TStream;
-			AKind: TChunkGroupKind;
-			AHadVisibleContent: Boolean); virtual; abstract;
+		procedure WriteGroupSpacing(AOutput: TStream; AKind: TChunkGroupKind; AHadVisibleContent: Boolean); virtual; abstract;
 
 		// -- Virtual methods with empty defaults (4) -- only HTML overrides ---
 
@@ -98,12 +84,10 @@ type
 		procedure EndContentGroup(AOutput: TStream); virtual;
 
 		/// <summary>Opens a sub-block wrapper when combined layout is active. Default: no-op.</summary>
-		procedure BeginContentSubBlock(AOutput: TStream;
-			AUseCombinedLayout: Boolean); virtual;
+		procedure BeginContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); virtual;
 
 		/// <summary>Closes a sub-block wrapper when combined layout is active. Default: no-op.</summary>
-		procedure EndContentSubBlock(AOutput: TStream;
-			AUseCombinedLayout: Boolean); virtual;
+		procedure EndContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); virtual;
 	public
 		constructor Create;
 		/// <summary>When True, empty blocks are skipped and remote attachment hints shown instead.</summary>
@@ -114,18 +98,12 @@ type
 		///   Template method: iterates chunk groups, delegates format-specific
 		///   output to virtual methods. Do not override in subclasses.
 		/// </summary>
-		procedure FormatToStream(
-			AOutput: TStream;
-			AChunks: TObjectList<TGeminiChunk>;
-			const ASystemInstruction: string;
-			ARunSettings: TGeminiRunSettings;
-			const AResources: TArray<TFormatterResourceInfo>
-		);
+		procedure FormatToStream(AOutput: TStream; AChunks: TObjectList<TGeminiChunk>; const ASystemInstruction: string; ARunSettings: TGeminiRunSettings; const AResources: TArray<TFormatterResourceInfo>);
 	end;
 
 implementation
 
-{ TGeminiFormatterBase }
+{TGeminiFormatterBase}
 
 constructor TGeminiFormatterBase.Create;
 begin
@@ -144,24 +122,17 @@ begin
 	// Default: no-op. HTML overrides to close the message container div.
 end;
 
-procedure TGeminiFormatterBase.BeginContentSubBlock(AOutput: TStream;
-	AUseCombinedLayout: Boolean);
+procedure TGeminiFormatterBase.BeginContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean);
 begin
 	// Default: no-op. HTML overrides to open combined-part div.
 end;
 
-procedure TGeminiFormatterBase.EndContentSubBlock(AOutput: TStream;
-	AUseCombinedLayout: Boolean);
+procedure TGeminiFormatterBase.EndContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean);
 begin
 	// Default: no-op. HTML overrides to close combined-part div.
 end;
 
-procedure TGeminiFormatterBase.FormatToStream(
-	AOutput: TStream;
-	AChunks: TObjectList<TGeminiChunk>;
-	const ASystemInstruction: string;
-	ARunSettings: TGeminiRunSettings;
-	const AResources: TArray<TFormatterResourceInfo>);
+procedure TGeminiFormatterBase.FormatToStream(AOutput: TStream; AChunks: TObjectList<TGeminiChunk>; const ASystemInstruction: string; ARunSettings: TGeminiRunSettings; const AResources: TArray<TFormatterResourceInfo>);
 var
 	LGroups: TArray<TChunkGroup>;
 	LGroup: TChunkGroup;
@@ -206,15 +177,12 @@ begin
 				if LText = '' then
 					LText := LChunk.Text;
 				LHasResource := FindResourceForChunk(AResources, LChunk.Index, LResInfo);
-				WriteThinkingSubBlock(AOutput, LText, LHasResource, LResInfo,
-					LSubBlockIndex, Length(LGroup.Chunks));
+				WriteThinkingSubBlock(AOutput, LText, LHasResource, LResInfo, LSubBlockIndex, Length(LGroup.Chunks));
 			end;
 
 			EndThinkingGroup(AOutput);
 			WriteGroupSpacing(AOutput, gkThinking, True);
-		end
-		else
-		begin
+		end else begin
 			LFirstContent := True;
 			LUseCombinedLayout := Length(LGroup.Chunks) > 1;
 
@@ -237,8 +205,7 @@ begin
 				// Emit role header lazily on first visible sub-block
 				if LFirstContent then
 				begin
-					BeginContentGroup(AOutput, LGroup.Kind, LGroup.FirstCreateTime,
-						LGroup.TotalTokenCount, LPendingRemoteCount);
+					BeginContentGroup(AOutput, LGroup.Kind, LGroup.FirstCreateTime, LGroup.TotalTokenCount, LPendingRemoteCount);
 					LPendingRemoteCount := 0;
 					LFirstContent := False;
 				end

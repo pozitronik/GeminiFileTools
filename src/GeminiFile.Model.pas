@@ -52,8 +52,7 @@ type
 		/// <param name="AChunkIndex">Index of the parent chunk in the conversation.</param>
 		/// <param name="ASourceFilePath">Path to the original Gemini file.</param>
 		/// <param name="ALocation">Byte offset and length of base64 content in the file.</param>
-		constructor CreateLazy(const AMimeType: string; AChunkIndex: Integer;
-			const ASourceFilePath: string; const ALocation: TBase64Location);
+		constructor CreateLazy(const AMimeType: string; AChunkIndex: Integer; const ASourceFilePath: string; const ALocation: TBase64Location);
 
 		destructor Destroy; override;
 
@@ -279,8 +278,7 @@ begin
 	FIsLazy := False;
 end;
 
-constructor TGeminiResource.CreateLazy(const AMimeType: string; AChunkIndex: Integer;
-	const ASourceFilePath: string; const ALocation: TBase64Location);
+constructor TGeminiResource.CreateLazy(const AMimeType: string; AChunkIndex: Integer; const ASourceFilePath: string; const ALocation: TBase64Location);
 begin
 	inherited Create;
 	FMimeType := AMimeType;

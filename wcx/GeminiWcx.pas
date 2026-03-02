@@ -29,14 +29,7 @@ uses
 	GeminiFile.Formatter.Html;
 
 type
-	TVirtualFileKind = (
-		vfConversationText,
-		vfConversationMarkdown,
-		vfConversationHtml,
-		vfConversationHtmlEmbedded,
-		vfResourceDir,
-		vfResource
-	);
+	TVirtualFileKind = (vfConversationText, vfConversationMarkdown, vfConversationHtml, vfConversationHtmlEmbedded, vfResourceDir, vfResource);
 
 	TVirtualFileEntry = record
 		Path: string;
@@ -75,8 +68,7 @@ type
 		/// <summary>Formats a conversation using the given formatter and returns the result as bytes.</summary>
 		function FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
 		function EstimateEmbeddedHtmlSize: Int64;
-		function ExtractVirtualFile(const AEntry: TVirtualFileEntry;
-			const ADestPath: string): Integer;
+		function ExtractVirtualFile(const AEntry: TVirtualFileEntry; const ADestPath: string): Integer;
 		function WriteBytesToFile(const AData: TBytes; const AFilePath: string): Integer;
 		procedure ReportProgress(const AFileName: string; ASize: Integer);
 	public
@@ -96,8 +88,7 @@ type
 		/// <param name="ADestPath">Destination directory path.</param>
 		/// <param name="ADestName">Destination file name (full path).</param>
 		/// <returns>0 on success, error code on failure.</returns>
-		function ProcessCurrentFile(AOperation: Integer;
-			const ADestPath, ADestName: string): Integer;
+		function ProcessCurrentFile(AOperation: Integer; const ADestPath, ADestName: string): Integer;
 
 		property ProcessDataProc: TProcessDataProcW write FProcessDataProc;
 		property ChangeVolProc: TChangeVolProcW write FChangeVolProc;
@@ -120,10 +111,10 @@ type
 		CombineBlocksHtml: Boolean;
 	end;
 
-/// <summary>
-///   Returns the plugin configuration, reading from gemini.ini on first call.
-///   The INI file is expected next to the plugin DLL. Missing file = defaults.
-/// </summary>
+	/// <summary>
+	///   Returns the plugin configuration, reading from gemini.ini on first call.
+	///   The INI file is expected next to the plugin DLL. Missing file = defaults.
+	/// </summary>
 function GetPluginConfig: TPluginConfig;
 
 /// <summary>
@@ -139,8 +130,7 @@ function GetBaseName(const AFileName: string; AUseOriginalName: Boolean): string
 // Unicode (primary)
 function OpenArchiveW(var ArchiveData: TOpenArchiveDataW): THandle; stdcall;
 function ReadHeaderExW(hArcData: THandle; var HeaderData: THeaderDataExW): Integer; stdcall;
-function ProcessFileW(hArcData: THandle; Operation: Integer;
-	DestPath: PWideChar; DestName: PWideChar): Integer; stdcall;
+function ProcessFileW(hArcData: THandle; Operation: Integer; DestPath: PWideChar; DestName: PWideChar): Integer; stdcall;
 function CloseArchive(hArcData: THandle): Integer; stdcall;
 procedure SetChangeVolProcW(hArcData: THandle; pChangeVolProc: TChangeVolProcW); stdcall;
 procedure SetProcessDataProcW(hArcData: THandle; pProcessDataProc: TProcessDataProcW); stdcall;
@@ -152,8 +142,7 @@ function GetBackgroundFlags: Integer; stdcall;
 function OpenArchive(var ArchiveData: TOpenArchiveData): THandle; stdcall;
 function ReadHeader(hArcData: THandle; var HeaderData: THeaderData): Integer; stdcall;
 function ReadHeaderEx(hArcData: THandle; var HeaderData: THeaderDataEx): Integer; stdcall;
-function ProcessFile(hArcData: THandle; Operation: Integer;
-	DestPath: PAnsiChar; DestName: PAnsiChar): Integer; stdcall;
+function ProcessFile(hArcData: THandle; Operation: Integer; DestPath: PAnsiChar; DestName: PAnsiChar): Integer; stdcall;
 procedure SetChangeVolProc(hArcData: THandle; pChangeVolProc: TChangeVolProc); stdcall;
 procedure SetProcessDataProc(hArcData: THandle; pProcessDataProc: TProcessDataProc); stdcall;
 function CanYouHandleThisFile(FileName: PAnsiChar): LongBool; stdcall;
@@ -170,13 +159,13 @@ var
 	GPluginConfig: TPluginConfig;
 	GPluginConfigLoaded: Boolean;
 
-/// <summary>
-///   Returns custom CSS content from gemini.css located next to the plugin DLL.
-///   Caches the result on first call; returns empty string if file not found.
-/// </summary>
+	/// <summary>
+	///   Returns custom CSS content from gemini.css located next to the plugin DLL.
+	///   Caches the result on first call; returns empty string if file not found.
+	/// </summary>
 function GetCustomCSS: string;
 var
-	LDllPath: array[0..MAX_PATH] of Char;
+	LDllPath: array [0 .. MAX_PATH] of Char;
 	LCssPath: string;
 begin
 	if not GCustomCSSLoaded then
@@ -195,7 +184,7 @@ end;
 
 function GetPluginConfig: TPluginConfig;
 var
-	LDllPath: array[0..MAX_PATH] of Char;
+	LDllPath: array [0 .. MAX_PATH] of Char;
 	LIniPath: string;
 	LIni: TIniFile;
 begin
@@ -203,7 +192,7 @@ begin
 	begin
 		GPluginConfigLoaded := True;
 		// Defaults (record Default zeroes booleans, so set True defaults explicitly)
-		GPluginConfig := Default(TPluginConfig);
+		GPluginConfig := Default (TPluginConfig);
 		GPluginConfig.UseOriginalName := True;
 		GPluginConfig.EnableText := True;
 		GPluginConfig.EnableMarkdown := True;
@@ -220,34 +209,20 @@ begin
 			begin
 				LIni := TIniFile.Create(LIniPath);
 				try
-					GPluginConfig.UseOriginalName :=
-						LIni.ReadBool('General', 'UseOriginalName', True);
-					GPluginConfig.EnableText :=
-						LIni.ReadBool('Formatters', 'EnableText', True);
-					GPluginConfig.EnableMarkdown :=
-						LIni.ReadBool('Formatters', 'EnableMarkdown', True);
-					GPluginConfig.EnableHtml :=
-						LIni.ReadBool('Formatters', 'EnableHtml', True);
-					GPluginConfig.EnableHtmlEmbedded :=
-						LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', True);
-					GPluginConfig.HideEmptyBlocksText :=
-						LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
-					GPluginConfig.HideEmptyBlocksMd :=
-						LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', True);
-					GPluginConfig.HideEmptyBlocksHtml :=
-						LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', True);
-					GPluginConfig.DefaultFullWidth :=
-						LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', False);
-					GPluginConfig.DefaultExpandThinking :=
-						LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', False);
-					GPluginConfig.RenderMarkdown :=
-						LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', True);
-					GPluginConfig.CombineBlocksText :=
-						LIni.ReadBool('Formatters', 'CombineBlocksText', False);
-					GPluginConfig.CombineBlocksMd :=
-						LIni.ReadBool('Formatters', 'CombineBlocksMd', False);
-					GPluginConfig.CombineBlocksHtml :=
-						LIni.ReadBool('Formatters', 'CombineBlocksHtml', False);
+					GPluginConfig.UseOriginalName := LIni.ReadBool('General', 'UseOriginalName', True);
+					GPluginConfig.EnableText := LIni.ReadBool('Formatters', 'EnableText', True);
+					GPluginConfig.EnableMarkdown := LIni.ReadBool('Formatters', 'EnableMarkdown', True);
+					GPluginConfig.EnableHtml := LIni.ReadBool('Formatters', 'EnableHtml', True);
+					GPluginConfig.EnableHtmlEmbedded := LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', True);
+					GPluginConfig.HideEmptyBlocksText := LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
+					GPluginConfig.HideEmptyBlocksMd := LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', True);
+					GPluginConfig.HideEmptyBlocksHtml := LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', True);
+					GPluginConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', False);
+					GPluginConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', False);
+					GPluginConfig.RenderMarkdown := LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', True);
+					GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', False);
+					GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', False);
+					GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', False);
 				finally
 					LIni.Free;
 				end;
@@ -283,7 +258,7 @@ begin
 		Result := 0;
 end;
 
-{ TGeminiArchive }
+{TGeminiArchive}
 
 constructor TGeminiArchive.Create(const AFileName: string; AOpenMode: Integer);
 begin
@@ -350,8 +325,7 @@ begin
 			LSubDir := 'resources/think/'
 		else
 			LSubDir := 'resources/';
-		FResourceInfos[I].FileName := Format(LSubDir + 'resource_%.*d%s',
-			[LPadWidth, I, FResources[I].GetFileExtension]);
+		FResourceInfos[I].FileName := Format(LSubDir + 'resource_%.*d%s', [LPadWidth, I, FResources[I].GetFileExtension]);
 		FResourceInfos[I].MimeType := FResources[I].MimeType;
 		FResourceInfos[I].Base64Data := ''; // deferred: loaded on demand for embedded HTML
 		FResourceInfos[I].DecodedSize := FResources[I].DecodedSize;
@@ -365,8 +339,7 @@ var
 begin
 	LStream := TMemoryStream.Create;
 	try
-		AFormatter.FormatToStream(LStream, FGeminiFile.Chunks,
-			FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
+		AFormatter.FormatToStream(LStream, FGeminiFile.Chunks, FGeminiFile.SystemInstruction, FGeminiFile.RunSettings, FResourceInfos);
 		Result := StreamToBytes(LStream);
 	finally
 		LStream.Free;
@@ -431,7 +404,7 @@ begin
 	// conversation.txt (or originalname.txt)
 	if LConfig.EnableText then
 	begin
-		LEntry := Default(TVirtualFileEntry);
+		LEntry := Default (TVirtualFileEntry);
 		LEntry.Path := FBaseName + '.txt';
 		LEntry.Kind := vfConversationText;
 		LEntry.UnpackedSize := Length(FCachedText);
@@ -442,7 +415,7 @@ begin
 	// conversation.md (or originalname.md)
 	if LConfig.EnableMarkdown then
 	begin
-		LEntry := Default(TVirtualFileEntry);
+		LEntry := Default (TVirtualFileEntry);
 		LEntry.Path := FBaseName + '.md';
 		LEntry.Kind := vfConversationMarkdown;
 		LEntry.UnpackedSize := Length(FCachedMarkdown);
@@ -453,7 +426,7 @@ begin
 	// conversation.html (or originalname.html)
 	if LConfig.EnableHtml then
 	begin
-		LEntry := Default(TVirtualFileEntry);
+		LEntry := Default (TVirtualFileEntry);
 		LEntry.Path := FBaseName + '.html';
 		LEntry.Kind := vfConversationHtml;
 		LEntry.UnpackedSize := Length(FCachedHtml);
@@ -466,7 +439,7 @@ begin
 		// conversation_full.html (or originalname_full.html, embedded)
 		if LConfig.EnableHtmlEmbedded then
 		begin
-			LEntry := Default(TVirtualFileEntry);
+			LEntry := Default (TVirtualFileEntry);
 			LEntry.Path := FBaseName + '_full.html';
 			LEntry.Kind := vfConversationHtmlEmbedded;
 			LEntry.UnpackedSize := EstimateEmbeddedHtmlSize;
@@ -475,7 +448,7 @@ begin
 		end;
 
 		// resources\ directory
-		LEntry := Default(TVirtualFileEntry);
+		LEntry := Default (TVirtualFileEntry);
 		LEntry.Path := 'resources';
 		LEntry.Kind := vfResourceDir;
 		LEntry.UnpackedSize := 0;
@@ -493,7 +466,7 @@ begin
 			end;
 		if LHasThinkingResources then
 		begin
-			LEntry := Default(TVirtualFileEntry);
+			LEntry := Default (TVirtualFileEntry);
 			LEntry.Path := 'resources\think';
 			LEntry.Kind := vfResourceDir;
 			LEntry.UnpackedSize := 0;
@@ -504,7 +477,7 @@ begin
 		// Individual resources -- paths derived from FResourceInfos (single source of truth)
 		for I := 0 to High(FResourceInfos) do
 		begin
-			LEntry := Default(TVirtualFileEntry);
+			LEntry := Default (TVirtualFileEntry);
 			LEntry.Path := StringReplace(FResourceInfos[I].FileName, '/', '\', [rfReplaceAll]);
 			LEntry.Kind := vfResource;
 			LEntry.UnpackedSize := FResourceInfos[I].DecodedSize;
@@ -552,8 +525,7 @@ begin
 	Result := 0;
 end;
 
-function TGeminiArchive.ProcessCurrentFile(AOperation: Integer;
-	const ADestPath, ADestName: string): Integer;
+function TGeminiArchive.ProcessCurrentFile(AOperation: Integer; const ADestPath, ADestName: string): Integer;
 var
 	LEntry: TVirtualFileEntry;
 	LFullPath: string;
@@ -582,8 +554,7 @@ begin
 	Result := ExtractVirtualFile(LEntry, LFullPath);
 end;
 
-function TGeminiArchive.ExtractVirtualFile(const AEntry: TVirtualFileEntry;
-	const ADestPath: string): Integer;
+function TGeminiArchive.ExtractVirtualFile(const AEntry: TVirtualFileEntry; const ADestPath: string): Integer;
 var
 	LDir: string;
 	LHtmlFmt: TGeminiHtmlFormatter;
@@ -607,51 +578,51 @@ begin
 			Result := WriteBytesToFile(FCachedHtml, ADestPath);
 
 		vfConversationHtmlEmbedded:
-		begin
-			// Load base64 data on demand for embedding
-			for I := 0 to High(FResourceInfos) do
-				FResourceInfos[I].Base64Data := FResources[I].Base64Data; // triggers lazy load
+			begin
+				// Load base64 data on demand for embedding
+				for I := 0 to High(FResourceInfos) do
+					FResourceInfos[I].Base64Data := FResources[I].Base64Data; // triggers lazy load
 
-			// Generate on-demand (can be large)
-			LConfig := GetPluginConfig;
-			LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
-			LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
-			LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
-			LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-			LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
-			LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
-			LFmt := LHtmlFmt;
-			Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
+				// Generate on-demand (can be large)
+				LConfig := GetPluginConfig;
+				LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
+				LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
+				LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
+				LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+				LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
+				LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
+				LFmt := LHtmlFmt;
+				Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
 
-			// Release base64 data to free memory
-			for I := 0 to High(FResourceInfos) do
-				FResourceInfos[I].Base64Data := '';
-			for I := 0 to High(FResources) do
-				FResources[I].ReleaseBase64;
-		end;
+				// Release base64 data to free memory
+				for I := 0 to High(FResourceInfos) do
+					FResourceInfos[I].Base64Data := '';
+				for I := 0 to High(FResources) do
+					FResources[I].ReleaseBase64;
+			end;
 
 		vfResourceDir:
-		begin
-			// Create the directory
-			if not TDirectory.Exists(ADestPath) then
-				ForceDirectories(ADestPath);
-			Result := 0;
-		end;
+			begin
+				// Create the directory
+				if not TDirectory.Exists(ADestPath) then
+					ForceDirectories(ADestPath);
+				Result := 0;
+			end;
 
 		vfResource:
-		begin
-			if (AEntry.ResourceIndex < 0) or (AEntry.ResourceIndex > High(FResources)) then
-				Exit(E_BAD_DATA);
-			try
-				FResources[AEntry.ResourceIndex].SaveToFile(ADestPath);
-				ReportProgress(ADestPath, FResources[AEntry.ResourceIndex].DecodedSize);
-				Result := 0;
-			except
-				Result := E_EWRITE;
+			begin
+				if (AEntry.ResourceIndex < 0) or (AEntry.ResourceIndex > High(FResources)) then
+					Exit(E_BAD_DATA);
+				try
+					FResources[AEntry.ResourceIndex].SaveToFile(ADestPath);
+					ReportProgress(ADestPath, FResources[AEntry.ResourceIndex].DecodedSize);
+					Result := 0;
+				except
+					Result := E_EWRITE;
+				end;
 			end;
-		end;
-	else
-		Result := E_NOT_SUPPORTED;
+		else
+			Result := E_NOT_SUPPORTED;
 	end;
 end;
 
@@ -711,8 +682,7 @@ begin
 	Result := TGeminiArchive(hArcData).ReadNextHeader(HeaderData);
 end;
 
-function ProcessFileW(hArcData: THandle; Operation: Integer;
-	DestPath: PWideChar; DestName: PWideChar): Integer; stdcall;
+function ProcessFileW(hArcData: THandle; Operation: Integer; DestPath: PWideChar; DestName: PWideChar): Integer; stdcall;
 var
 	LDestPath, LDestName: string;
 begin
@@ -765,7 +735,7 @@ function CanYouHandleThisFileW(FileName: PWideChar): LongBool; stdcall;
 var
 	LStream: TFileStream;
 	LByte: Byte;
-	LBom: array[0..1] of Byte;
+	LBom: array [0 .. 1] of Byte;
 begin
 	Result := False;
 	try
@@ -775,7 +745,7 @@ begin
 			if (LStream.Size >= 3) and (LStream.Read(LByte, 1) = 1) and (LByte = $EF) then
 			begin
 				if (LStream.Read(LBom, 2) = 2) and (LBom[0] = $BB) and (LBom[1] = $BF) then
-					{ BOM consumed, stream at position 3 }
+					{BOM consumed, stream at position 3}
 				else
 					LStream.Position := 0; // Not a BOM, rewind
 			end
@@ -872,8 +842,7 @@ begin
 	HeaderData.Flags := LHeaderW.Flags;
 end;
 
-function ProcessFile(hArcData: THandle; Operation: Integer;
-	DestPath: PAnsiChar; DestName: PAnsiChar): Integer; stdcall;
+function ProcessFile(hArcData: THandle; Operation: Integer; DestPath: PAnsiChar; DestName: PAnsiChar): Integer; stdcall;
 var
 	LDestPathW, LDestNameW: PWideChar;
 	LPathStr, LNameStr: WideString;
@@ -915,15 +884,17 @@ begin
 end;
 
 initialization
-	GArchives := TList<TGeminiArchive>.Create;
+
+GArchives := TList<TGeminiArchive>.Create;
 
 finalization
-	// Free any leaked archive handles
-	while GArchives.Count > 0 do
-	begin
-		GArchives[0].Free;
-		GArchives.Delete(0);
-	end;
-	GArchives.Free;
+
+// Free any leaked archive handles
+while GArchives.Count > 0 do
+begin
+	GArchives[0].Free;
+	GArchives.Delete(0);
+end;
+GArchives.Free;
 
 end.

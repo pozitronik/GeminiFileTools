@@ -14,9 +14,9 @@ const
 	/// <summary>Windows-style line ending used by all formatters.</summary>
 	CRLF = #13#10;
 
-/// <summary>
-///   Writes a UTF-8 encoded string directly to the stream.
-/// </summary>
+	/// <summary>
+	///   Writes a UTF-8 encoded string directly to the stream.
+	/// </summary>
 procedure StreamWrite(AStream: TStream; const AStr: string);
 
 /// <summary>
@@ -60,12 +60,16 @@ begin
 		begin
 			LCh := AStr[I];
 			case LCh of
-				'&': LSB.Append('&amp;');
-				'<': LSB.Append('&lt;');
-				'>': LSB.Append('&gt;');
-				'"': LSB.Append('&quot;');
-			else
-				LSB.Append(LCh);
+				'&':
+					LSB.Append('&amp;');
+				'<':
+					LSB.Append('&lt;');
+				'>':
+					LSB.Append('&gt;');
+				'"':
+					LSB.Append('&quot;');
+				else
+					LSB.Append(LCh);
 			end;
 		end;
 		Result := LSB.ToString;

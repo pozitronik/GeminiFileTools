@@ -60,8 +60,7 @@ type
 		///   Checks if a resource holds a __LAZY:N placeholder and returns a lazy replacement.
 		///   Returns nil if the resource is not a placeholder.
 		/// </summary>
-		function ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource;
-			const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
+		function ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource; const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
 	public
 		/// <summary>
 		///   Creates a TGeminiFile with default parser and extractor implementations.
@@ -198,8 +197,7 @@ begin
 	FSystemInstruction := FParser.Parse(AStream, FRunSettings, FChunks);
 end;
 
-function TGeminiFile.ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource;
-	const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
+function TGeminiFile.ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource; const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
 var
 	LIndex: Integer;
 begin
@@ -208,9 +206,7 @@ begin
 	if (LIndex < 0) or (LIndex > High(ALocations)) then
 		Exit;
 
-	Result := GeminiFile.Model.TGeminiResource.CreateLazy(
-		AResource.MimeType, AResource.ChunkIndex,
-		FFilePath, ALocations[LIndex]);
+	Result := GeminiFile.Model.TGeminiResource.CreateLazy(AResource.MimeType, AResource.ChunkIndex, FFilePath, ALocations[LIndex]);
 end;
 
 procedure TGeminiFile.LinkLazyResources(const ALocations: TArray<TBase64Location>);

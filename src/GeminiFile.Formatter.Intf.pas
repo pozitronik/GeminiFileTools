@@ -18,17 +18,11 @@ type
 	///   Implemented by text, markdown, and HTML formatters.
 	/// </summary>
 	IGeminiFormatter = interface
-		['{A7F3E8C1-4B2D-4E9A-8F1C-6D5A3B2E7F09}']
+		['{29590909-9D33-42EF-8327-35B1651B8C19}']
 		/// <summary>
 		///   Writes the formatted conversation to the output stream.
 		/// </summary>
-		procedure FormatToStream(
-			AOutput: TStream;
-			AChunks: TObjectList<TGeminiChunk>;
-			const ASystemInstruction: string;
-			ARunSettings: TGeminiRunSettings;
-			const AResources: TArray<TFormatterResourceInfo>
-		);
+		procedure FormatToStream(AOutput: TStream; AChunks: TObjectList<TGeminiChunk>; const ASystemInstruction: string; ARunSettings: TGeminiRunSettings; const AResources: TArray<TFormatterResourceInfo>);
 	end;
 
 implementation
