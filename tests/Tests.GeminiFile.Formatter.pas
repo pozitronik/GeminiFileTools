@@ -77,6 +77,8 @@ type
 		procedure PartLevelThinking_RenderedInModelBlock;
 		[Test]
 		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
+		[Test]
+		procedure SourceFileName_IncludedInTitle;
 	end;
 
 	[TestFixture]
@@ -131,6 +133,8 @@ type
 		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
 		[Test]
 		procedure ThinkingWithTimestampAndResource_CombinedSummary;
+		[Test]
+		procedure SourceFileName_IncludedInTitle;
 	end;
 
 	[TestFixture]
@@ -211,6 +215,8 @@ type
 		procedure ThinkingBlock_RenderMarkdownFalse_Escaped;
 		[Test]
 		procedure MetadataHeader_IncludesModelAndSettings;
+		[Test]
+		procedure SourceFileName_IncludedInTitleAndH1;
 	end;
 
 implementation
@@ -568,6 +574,15 @@ begin
 	Assert.Contains(LResult, 'Response');
 end;
 
+procedure TTestGeminiTextFormatter.SourceFileName_IncludedInTitle;
+var
+	LResult: string;
+begin
+	FFormatter.SourceFileName := 'MyChat';
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '=== Gemini Conversation - MyChat ===');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -876,6 +891,15 @@ begin
 	// Summary should contain both timestamp and "with attachment"
 	Assert.Contains(LResult, '2026-03-01 12:00:00');
 	Assert.Contains(LResult, 'with attachment');
+end;
+
+procedure TTestGeminiMarkdownFormatter.SourceFileName_IncludedInTitle;
+var
+	LResult: string;
+begin
+	FFormatter.SourceFileName := 'MyChat';
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '# Gemini Conversation - MyChat');
 end;
 
 // ========================================================================
@@ -1590,6 +1614,33 @@ begin
 	LResult := FormatToString(False, '', nil);
 	Assert.Contains(LResult, '<strong>Model:</strong> models/gemini-2.5-pro');
 	Assert.Contains(LResult, '<strong>Temperature:</strong> 0.7');
+end;
+
+procedure TTestGeminiHtmlFormatter.SourceFileName_IncludedInTitleAndH1;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LResult: string;
+	LBytes: TBytes;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.SourceFileName := 'MyChat';
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<title>Gemini Conversation - MyChat</title>');
+	Assert.Contains(LResult, '<h1>Gemini Conversation - MyChat</h1>');
 end;
 
 initialization

@@ -28,7 +28,10 @@ type
 	private
 		FHideEmptyBlocks: Boolean;
 		FCombineBlocks: Boolean;
+		FSourceFileName: string;
 	protected
+		/// <summary>Returns 'Gemini Conversation' with the source filename appended when set.</summary>
+		function GetDocumentTitle: string;
 		// -- Abstract methods (11) -- every formatter must override -----------
 
 		/// <summary>Writes document header, metadata, system instruction, and conversation heading.</summary>
@@ -94,6 +97,8 @@ type
 		property HideEmptyBlocks: Boolean read FHideEmptyBlocks write FHideEmptyBlocks;
 		/// <summary>When True, consecutive same-kind chunks are merged into a single visual block.</summary>
 		property CombineBlocks: Boolean read FCombineBlocks write FCombineBlocks;
+		/// <summary>Source file name shown in the document title for identification.</summary>
+		property SourceFileName: string read FSourceFileName write FSourceFileName;
 		/// <summary>
 		///   Template method: iterates chunk groups, delegates format-specific
 		///   output to virtual methods. Do not override in subclasses.
@@ -110,6 +115,14 @@ begin
 	inherited Create;
 	FHideEmptyBlocks := True;
 	FCombineBlocks := False;
+end;
+
+function TGeminiFormatterBase.GetDocumentTitle: string;
+begin
+	if FSourceFileName <> '' then
+		Result := 'Gemini Conversation - ' + FSourceFileName
+	else
+		Result := 'Gemini Conversation';
 end;
 
 procedure TGeminiFormatterBase.WriteDocumentEnd(AOutput: TStream);

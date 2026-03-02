@@ -55,7 +55,7 @@ var
 begin
 	LFmt := TFormatSettings.Invariant;
 
-	StreamWriteLn(AOutput, '=== Gemini Conversation ===');
+	StreamWriteLn(AOutput, '=== ' + GetDocumentTitle + ' ===');
 	if ARunSettings.Model <> '' then
 		StreamWriteLn(AOutput, 'Model: ' + ARunSettings.Model);
 	if not IsNaN(ARunSettings.Temperature) then

@@ -130,7 +130,7 @@ begin
 	StreamWriteLn(AOutput, '<head>');
 	StreamWriteLn(AOutput, '<meta charset="UTF-8">');
 	StreamWriteLn(AOutput, '<meta name="viewport" content="width=device-width, initial-scale=1.0">');
-	StreamWriteLn(AOutput, '<title>Gemini Conversation</title>');
+	StreamWriteLn(AOutput, '<title>' + HtmlEscape(GetDocumentTitle) + '</title>');
 	StreamWriteLn(AOutput, '<style>');
 	StreamWriteLn(AOutput, CSS_STYLES);
 	if FCustomCSS <> '' then
@@ -150,7 +150,7 @@ begin
 	else
 		StreamWriteLn(AOutput, '<body>');
 
-	StreamWriteLn(AOutput, '<h1>Gemini Conversation</h1>');
+	StreamWriteLn(AOutput, '<h1>' + HtmlEscape(GetDocumentTitle) + '</h1>');
 
 	// Metadata
 	StreamWrite(AOutput, '<div class="meta">');

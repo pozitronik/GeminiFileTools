@@ -614,7 +614,7 @@ begin
 		Assert.IsTrue(FileExists(LOutFile), 'Output file should exist');
 
 		LContent := TFile.ReadAllText(LOutFile, TEncoding.UTF8);
-		Assert.Contains(LContent, '=== Gemini Conversation ===');
+		Assert.Contains(LContent, '=== Gemini Conversation - Tailscale ===');
 		Assert.Contains(LContent, 'models/gemini-2.5-pro');
 	finally
 		LArchive.Free;

@@ -386,6 +386,7 @@ begin
 
 	// Plain text -- interface variable manages lifetime via ref-counting
 	LTextFmt := TGeminiTextFormatter.Create;
+	LTextFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
 	LTextFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksText;
 	LTextFmt.CombineBlocks := LConfig.CombineBlocksText;
 	LFmt := LTextFmt;
@@ -393,6 +394,7 @@ begin
 
 	// Markdown
 	LMdFmt := TGeminiMarkdownFormatter.Create;
+	LMdFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
 	LMdFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksMd;
 	LMdFmt.CombineBlocks := LConfig.CombineBlocksMd;
 	LFmt := LMdFmt;
@@ -400,6 +402,7 @@ begin
 
 	// HTML (external resources)
 	LHtmlFmt := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
+	LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
 	ConfigureHtmlFormatter(LHtmlFmt, LConfig);
 	LFmt := LHtmlFmt;
 	FCachedHtml := FormatToBytes(LFmt);
@@ -609,6 +612,7 @@ begin
 				// Generate on-demand (can be large)
 				LConfig := GetPluginConfig;
 				LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
+				LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
 				ConfigureHtmlFormatter(LHtmlFmt, LConfig);
 				LFmt := LHtmlFmt;
 				Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);

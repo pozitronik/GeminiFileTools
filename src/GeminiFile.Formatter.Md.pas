@@ -55,7 +55,7 @@ var
 begin
 	LFmt := TFormatSettings.Invariant;
 
-	StreamWriteLn(AOutput, '# Gemini Conversation');
+	StreamWriteLn(AOutput, '# ' + GetDocumentTitle);
 	StreamWriteLn(AOutput);
 
 	// Metadata line
