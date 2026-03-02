@@ -55,6 +55,12 @@ type
 
 implementation
 
+/// <summary>Builds the output filename for a resource at the given index.</summary>
+function MakeResourceFileName(const ADir, APrefix: string; APadWidth, AIndex: Integer; const AExtension: string): string;
+begin
+	Result := TPath.Combine(ADir, Format('%s_%.*d%s', [APrefix, APadWidth, AIndex, AExtension]));
+end;
+
 {TGeminiResourceExtractor}
 
 function TGeminiResourceExtractor.ExtractAll(const AResources: TArray<TGeminiResource>; const AOutputDir: string; AThreaded: Boolean; const ANamePrefix: string; AOnProgress: TGeminiExtractProgressEvent): Integer;
@@ -79,7 +85,7 @@ begin
 			var
 				LFN: string;
 			begin
-				LFN := TPath.Combine(LAbsDir, Format('%s_%.*d%s', [ANamePrefix, LPadWidth, AIdx, AResources[AIdx].GetFileExtension]));
+				LFN := MakeResourceFileName(LAbsDir, ANamePrefix, LPadWidth, AIdx, AResources[AIdx].GetFileExtension);
 				AResources[AIdx].SaveToFile(LFN);
 				if Assigned(AOnProgress) then
 					AOnProgress(AIdx, Length(AResources), LFN);
@@ -87,7 +93,7 @@ begin
 	end else begin
 		for I := 0 to Result - 1 do
 		begin
-			LFileName := TPath.Combine(LAbsDir, Format('%s_%.*d%s', [ANamePrefix, LPadWidth, I, AResources[I].GetFileExtension]));
+			LFileName := MakeResourceFileName(LAbsDir, ANamePrefix, LPadWidth, I, AResources[I].GetFileExtension);
 			AResources[I].SaveToFile(LFileName);
 			if Assigned(AOnProgress) then
 				AOnProgress(I, Result, LFileName);

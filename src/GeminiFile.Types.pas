@@ -53,6 +53,8 @@ type
 		DecodedSize: Int64;
 		/// <summary>Index of the parent chunk in the conversation.</summary>
 		ChunkIndex: Integer;
+		/// <summary>True if this resource belongs to a thinking/reasoning chunk.</summary>
+		IsThinking: Boolean;
 	end;
 
 	/// <summary>

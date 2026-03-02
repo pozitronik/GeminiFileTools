@@ -53,6 +53,10 @@ type
 		procedure UnclosedCodeBlock_TreatedAsProse;
 		[Test]
 		procedure EmptyDelimiter_ReturnsSingleElement;
+		[Test]
+		procedure UnclosedInlineCode_BacktickPassesThrough;
+		[Test]
+		procedure PureCR_NormalizedToLF;
 	end;
 
 implementation
@@ -230,6 +234,25 @@ begin
 	LResult := MarkdownToHtml('   ');
 	// Whitespace-only input produces an empty paragraph that gets skipped
 	Assert.AreEqual('', LResult);
+end;
+
+procedure TTestMarkdownToHtml.UnclosedInlineCode_BacktickPassesThrough;
+var
+	LResult: string;
+begin
+	// A lone opening backtick without a closing one should pass through literally
+	LResult := MarkdownToHtml('Use `printf here');
+	Assert.Contains(LResult, '`printf here');
+	Assert.IsFalse(LResult.Contains('<code>'), 'Unclosed backtick must not produce code tag');
+end;
+
+procedure TTestMarkdownToHtml.PureCR_NormalizedToLF;
+var
+	LResult: string;
+begin
+	// Old Mac CR-only line endings should be normalized and treated as line breaks
+	LResult := MarkdownToHtml('Line one' + #13 + 'Line two');
+	Assert.Contains(LResult, 'Line one<br>Line two');
 end;
 
 initialization

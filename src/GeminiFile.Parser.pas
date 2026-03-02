@@ -278,7 +278,8 @@ begin
 		LModArr := TJSONArray(AObj.FindValue('responseModalities'));
 		SetLength(LModalities, LModArr.Count);
 		for I := 0 to LModArr.Count - 1 do
-			LModalities[I] := LModArr.Items[I].Value;
+			if not(LModArr.Items[I] is TJSONNull) then
+				LModalities[I] := LModArr.Items[I].Value;
 		ARunSettings.ResponseModalities := LModalities;
 	end;
 end;

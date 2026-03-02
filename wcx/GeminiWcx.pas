@@ -149,6 +149,23 @@ function CanYouHandleThisFile(FileName: PAnsiChar): LongBool; stdcall;
 
 implementation
 
+const
+	/// Default plugin configuration values (single source of truth)
+	DEF_UseOriginalName = True;
+	DEF_EnableText = True;
+	DEF_EnableMarkdown = True;
+	DEF_EnableHtml = True;
+	DEF_EnableHtmlEmbedded = True;
+	DEF_HideEmptyBlocksText = True;
+	DEF_HideEmptyBlocksMd = True;
+	DEF_HideEmptyBlocksHtml = True;
+	DEF_DefaultFullWidth = False;
+	DEF_DefaultExpandThinking = False;
+	DEF_RenderMarkdown = True;
+	DEF_CombineBlocksText = False;
+	DEF_CombineBlocksMd = False;
+	DEF_CombineBlocksHtml = False;
+
 var
 	/// Tracks live archive handles for validation
 	GArchives: TList<TGeminiArchive>;
@@ -191,17 +208,17 @@ begin
 	if not GPluginConfigLoaded then
 	begin
 		GPluginConfigLoaded := True;
-		// Defaults (record Default zeroes booleans, so set True defaults explicitly)
+		// Defaults from constants (single source of truth)
 		GPluginConfig := Default (TPluginConfig);
-		GPluginConfig.UseOriginalName := True;
-		GPluginConfig.EnableText := True;
-		GPluginConfig.EnableMarkdown := True;
-		GPluginConfig.EnableHtml := True;
-		GPluginConfig.EnableHtmlEmbedded := True;
-		GPluginConfig.HideEmptyBlocksText := True;
-		GPluginConfig.HideEmptyBlocksMd := True;
-		GPluginConfig.HideEmptyBlocksHtml := True;
-		GPluginConfig.RenderMarkdown := True;
+		GPluginConfig.UseOriginalName := DEF_UseOriginalName;
+		GPluginConfig.EnableText := DEF_EnableText;
+		GPluginConfig.EnableMarkdown := DEF_EnableMarkdown;
+		GPluginConfig.EnableHtml := DEF_EnableHtml;
+		GPluginConfig.EnableHtmlEmbedded := DEF_EnableHtmlEmbedded;
+		GPluginConfig.HideEmptyBlocksText := DEF_HideEmptyBlocksText;
+		GPluginConfig.HideEmptyBlocksMd := DEF_HideEmptyBlocksMd;
+		GPluginConfig.HideEmptyBlocksHtml := DEF_HideEmptyBlocksHtml;
+		GPluginConfig.RenderMarkdown := DEF_RenderMarkdown;
 		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
 		begin
 			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
@@ -209,20 +226,20 @@ begin
 			begin
 				LIni := TIniFile.Create(LIniPath);
 				try
-					GPluginConfig.UseOriginalName := LIni.ReadBool('General', 'UseOriginalName', True);
-					GPluginConfig.EnableText := LIni.ReadBool('Formatters', 'EnableText', True);
-					GPluginConfig.EnableMarkdown := LIni.ReadBool('Formatters', 'EnableMarkdown', True);
-					GPluginConfig.EnableHtml := LIni.ReadBool('Formatters', 'EnableHtml', True);
-					GPluginConfig.EnableHtmlEmbedded := LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', True);
-					GPluginConfig.HideEmptyBlocksText := LIni.ReadBool('Formatters', 'HideEmptyBlocksText', True);
-					GPluginConfig.HideEmptyBlocksMd := LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', True);
-					GPluginConfig.HideEmptyBlocksHtml := LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', True);
-					GPluginConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', False);
-					GPluginConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', False);
-					GPluginConfig.RenderMarkdown := LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', True);
-					GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', False);
-					GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', False);
-					GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', False);
+					GPluginConfig.UseOriginalName := LIni.ReadBool('General', 'UseOriginalName', DEF_UseOriginalName);
+					GPluginConfig.EnableText := LIni.ReadBool('Formatters', 'EnableText', DEF_EnableText);
+					GPluginConfig.EnableMarkdown := LIni.ReadBool('Formatters', 'EnableMarkdown', DEF_EnableMarkdown);
+					GPluginConfig.EnableHtml := LIni.ReadBool('Formatters', 'EnableHtml', DEF_EnableHtml);
+					GPluginConfig.EnableHtmlEmbedded := LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', DEF_EnableHtmlEmbedded);
+					GPluginConfig.HideEmptyBlocksText := LIni.ReadBool('Formatters', 'HideEmptyBlocksText', DEF_HideEmptyBlocksText);
+					GPluginConfig.HideEmptyBlocksMd := LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', DEF_HideEmptyBlocksMd);
+					GPluginConfig.HideEmptyBlocksHtml := LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', DEF_HideEmptyBlocksHtml);
+					GPluginConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', DEF_DefaultFullWidth);
+					GPluginConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', DEF_DefaultExpandThinking);
+					GPluginConfig.RenderMarkdown := LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', DEF_RenderMarkdown);
+					GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', DEF_CombineBlocksText);
+					GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', DEF_CombineBlocksMd);
+					GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', DEF_CombineBlocksHtml);
 				finally
 					LIni.Free;
 				end;
@@ -321,7 +338,8 @@ begin
 
 	for I := 0 to High(FResources) do
 	begin
-		if IsThinkingResource(FResources[I].ChunkIndex) then
+		FResourceInfos[I].IsThinking := IsThinkingResource(FResources[I].ChunkIndex);
+		if FResourceInfos[I].IsThinking then
 			LSubDir := 'resources/think/'
 		else
 			LSubDir := 'resources/';
@@ -456,10 +474,9 @@ begin
 		FVirtualFiles.Add(LEntry);
 
 		// resources\think\ subdirectory (only if thinking resources exist)
-		// Derived from FResourceInfos paths (populated by BuildResourceInfos)
 		LHasThinkingResources := False;
 		for I := 0 to High(FResourceInfos) do
-			if FResourceInfos[I].FileName.StartsWith('resources/think/') then
+			if FResourceInfos[I].IsThinking then
 			begin
 				LHasThinkingResources := True;
 				Break;
