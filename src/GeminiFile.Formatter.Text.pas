@@ -43,6 +43,12 @@ uses
 
 {TGeminiTextFormatter}
 
+/// <summary>Formats a resource info record as a text attachment indicator.</summary>
+function FormatTextAttachment(const AResInfo: TFormatterResourceInfo): string;
+begin
+	Result := '[Attached: ' + AResInfo.FileName + ' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]';
+end;
+
 procedure TGeminiTextFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
 var
 	LFmt: TFormatSettings;
@@ -87,7 +93,7 @@ begin
 		StreamWriteLn(AOutput, '- - -');
 	StreamWriteLn(AOutput, AText);
 	if AHasResource then
-		StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName + ' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
+		StreamWriteLn(AOutput, FormatTextAttachment(AResInfo));
 end;
 
 procedure TGeminiTextFormatter.EndThinkingGroup(AOutput: TStream);
@@ -136,7 +142,7 @@ end;
 
 procedure TGeminiTextFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
-	StreamWriteLn(AOutput, '[Attached: ' + AResInfo.FileName + ' (' + AResInfo.MimeType + ', ~' + FormatByteSize(AResInfo.DecodedSize) + ')]');
+	StreamWriteLn(AOutput, FormatTextAttachment(AResInfo));
 end;
 
 procedure TGeminiTextFormatter.WriteRemoteHint(AOutput: TStream; ACount: Integer);

@@ -29,7 +29,18 @@ procedure StreamWriteLn(AStream: TStream; const AStr: string = '');
 /// </summary>
 function HtmlEscape(const AStr: string): string;
 
+/// <summary>
+///   Builds the parenthetical suffix for thinking group summaries.
+///   Returns e.g. ' (2024-01-15 12:00:00, with attachment)' or ''.
+/// </summary>
+/// <param name="ACreateTime">First non-zero timestamp in the group.</param>
+/// <param name="AAnyResource">Whether the group contains an embedded resource.</param>
+function ThinkingSummarySuffix(ACreateTime: TDateTime; AAnyResource: Boolean): string;
+
 implementation
+
+uses
+	GeminiFile.Types;
 
 procedure StreamWrite(AStream: TStream; const AStr: string);
 var
@@ -43,6 +54,18 @@ end;
 procedure StreamWriteLn(AStream: TStream; const AStr: string);
 begin
 	StreamWrite(AStream, AStr + CRLF);
+end;
+
+function ThinkingSummarySuffix(ACreateTime: TDateTime; AAnyResource: Boolean): string;
+begin
+	if (ACreateTime > 0) and AAnyResource then
+		Result := ' (' + FormatCreateTime(ACreateTime) + ', with attachment)'
+	else if ACreateTime > 0 then
+		Result := ' (' + FormatCreateTime(ACreateTime) + ')'
+	else if AAnyResource then
+		Result := ' (with attachment)'
+	else
+		Result := '';
 end;
 
 function HtmlEscape(const AStr: string): string;

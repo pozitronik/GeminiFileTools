@@ -351,6 +351,16 @@ begin
 	end;
 end;
 
+/// <summary>Applies plugin config settings to an HTML formatter instance.</summary>
+procedure ConfigureHtmlFormatter(AFormatter: TGeminiHtmlFormatter; const AConfig: TPluginConfig);
+begin
+	AFormatter.HideEmptyBlocks := AConfig.HideEmptyBlocksHtml;
+	AFormatter.DefaultFullWidth := AConfig.DefaultFullWidth;
+	AFormatter.DefaultExpandThinking := AConfig.DefaultExpandThinking;
+	AFormatter.RenderMarkdown := AConfig.RenderMarkdown;
+	AFormatter.CombineBlocks := AConfig.CombineBlocksHtml;
+end;
+
 function TGeminiArchive.FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
 var
 	LStream: TMemoryStream;
@@ -390,11 +400,7 @@ begin
 
 	// HTML (external resources)
 	LHtmlFmt := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
-	LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
-	LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
-	LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-	LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
-	LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
+	ConfigureHtmlFormatter(LHtmlFmt, LConfig);
 	LFmt := LHtmlFmt;
 	FCachedHtml := FormatToBytes(LFmt);
 end;
@@ -603,11 +609,7 @@ begin
 				// Generate on-demand (can be large)
 				LConfig := GetPluginConfig;
 				LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
-				LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocksHtml;
-				LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
-				LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-				LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
-				LHtmlFmt.CombineBlocks := LConfig.CombineBlocksHtml;
+				ConfigureHtmlFormatter(LHtmlFmt, LConfig);
 				LFmt := LHtmlFmt;
 				Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
 

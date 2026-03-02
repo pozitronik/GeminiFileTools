@@ -30,6 +30,10 @@ type
 		FDefaultExpandThinking: Boolean;
 		FRenderMarkdown: Boolean;
 		FCustomCSS: string;
+		/// <summary>Writes a content div, applying Markdown rendering or HTML escaping.</summary>
+		procedure WriteContentDiv(AOutput: TStream; const AText: string);
+		/// <summary>Writes a thinking details open tag, respecting the expand setting.</summary>
+		procedure WriteThinkingDetailsOpen(AOutput: TStream);
 	protected
 		// -- Abstract method overrides (11) -----------------------------------
 		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); override;
@@ -98,6 +102,22 @@ begin
 	FCustomCSS := ACustomCSS;
 end;
 
+procedure TGeminiHtmlFormatter.WriteContentDiv(AOutput: TStream; const AText: string);
+begin
+	if FRenderMarkdown then
+		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
+	else
+		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteThinkingDetailsOpen(AOutput: TStream);
+begin
+	if FDefaultExpandThinking then
+		StreamWriteLn(AOutput, '<details class="thinking" open>')
+	else
+		StreamWriteLn(AOutput, '<details class="thinking">');
+end;
+
 procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
 var
 	LFmt: TFormatSettings;
@@ -158,22 +178,9 @@ begin
 end;
 
 procedure TGeminiHtmlFormatter.BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean);
-var
-	LSummary: string;
 begin
-	if FDefaultExpandThinking then
-		StreamWriteLn(AOutput, '<details class="thinking" open>')
-	else
-		StreamWriteLn(AOutput, '<details class="thinking">');
-
-	LSummary := 'Thinking';
-	if (ACreateTime > 0) and AAnyResource then
-		LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(ACreateTime)) + ', with attachment)'
-	else if ACreateTime > 0 then
-		LSummary := LSummary + ' (' + HtmlEscape(FormatCreateTime(ACreateTime)) + ')'
-	else if AAnyResource then
-		LSummary := LSummary + ' (with attachment)';
-	StreamWriteLn(AOutput, '<summary>' + LSummary + '</summary>');
+	WriteThinkingDetailsOpen(AOutput);
+	StreamWriteLn(AOutput, '<summary>Thinking' + HtmlEscape(ThinkingSummarySuffix(ACreateTime, AAnyResource)) + '</summary>');
 end;
 
 procedure TGeminiHtmlFormatter.WriteThinkingSubBlock(AOutput: TStream; const AText: string; AHasResource: Boolean; const AResInfo: TFormatterResourceInfo; ASubIndex, ASubCount: Integer);
@@ -184,10 +191,7 @@ begin
 	if LUseCombinedParts then
 		StreamWriteLn(AOutput, '<div class="combined-part">');
 
-	if FRenderMarkdown then
-		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
-	else
-		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
+	WriteContentDiv(AOutput, AText);
 
 	if AHasResource then
 		WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
@@ -240,24 +244,15 @@ end;
 
 procedure TGeminiHtmlFormatter.WritePartThinking(AOutput: TStream; const AThinking: string);
 begin
-	if FDefaultExpandThinking then
-		StreamWriteLn(AOutput, '<details class="thinking" open>')
-	else
-		StreamWriteLn(AOutput, '<details class="thinking">');
+	WriteThinkingDetailsOpen(AOutput);
 	StreamWriteLn(AOutput, '<summary>Thinking</summary>');
-	if FRenderMarkdown then
-		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AThinking) + '</div>')
-	else
-		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AThinking) + '</div>');
+	WriteContentDiv(AOutput, AThinking);
 	StreamWriteLn(AOutput, '</details>');
 end;
 
 procedure TGeminiHtmlFormatter.WriteContentText(AOutput: TStream; const AText: string);
 begin
-	if FRenderMarkdown then
-		StreamWriteLn(AOutput, '<div class="content">' + MarkdownToHtml(AText) + '</div>')
-	else
-		StreamWriteLn(AOutput, '<div class="content">' + HtmlEscape(AText) + '</div>');
+	WriteContentDiv(AOutput, AText);
 end;
 
 procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);

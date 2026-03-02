@@ -107,17 +107,8 @@ begin
 end;
 
 procedure TGeminiMarkdownFormatter.BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean);
-var
-	LSummary: string;
 begin
-	LSummary := 'Thinking';
-	if (ACreateTime > 0) and AAnyResource then
-		LSummary := LSummary + ' (' + FormatCreateTime(ACreateTime) + ', with attachment)'
-	else if ACreateTime > 0 then
-		LSummary := LSummary + ' (' + FormatCreateTime(ACreateTime) + ')'
-	else if AAnyResource then
-		LSummary := LSummary + ' (with attachment)';
-	StreamWriteLn(AOutput, '<details><summary>' + LSummary + '</summary>');
+	StreamWriteLn(AOutput, '<details><summary>Thinking' + ThinkingSummarySuffix(ACreateTime, AAnyResource) + '</summary>');
 	StreamWriteLn(AOutput);
 end;
 

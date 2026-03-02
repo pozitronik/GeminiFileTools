@@ -209,6 +209,8 @@ type
 		procedure ThinkingEmbedded_ResourceUsesDataUri;
 		[Test]
 		procedure ThinkingBlock_RenderMarkdownFalse_Escaped;
+		[Test]
+		procedure MetadataHeader_IncludesModelAndSettings;
 	end;
 
 implementation
@@ -1577,6 +1579,17 @@ begin
 	Assert.Contains(LResult, '**bold thinking**');
 	Assert.IsFalse(LResult.Contains('<strong>'),
 		'Markdown should not be rendered in thinking block when disabled');
+end;
+
+procedure TTestGeminiHtmlFormatter.MetadataHeader_IncludesModelAndSettings;
+var
+	LResult: string;
+begin
+	FRunSettings.Model := 'models/gemini-2.5-pro';
+	FRunSettings.Temperature := 0.7;
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, '<strong>Model:</strong> models/gemini-2.5-pro');
+	Assert.Contains(LResult, '<strong>Temperature:</strong> 0.7');
 end;
 
 initialization
