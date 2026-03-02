@@ -44,6 +44,7 @@
         <SanitizedProjectName>gemini</SanitizedProjectName>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=Gemini WCX Plugin;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=Gemini WCX Plugin;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <DCC_Define>WCX_PLUGIN;$(DCC_Define)</DCC_Define>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
         <GenDll>true</GenDll>
         <GenPackage>false</GenPackage>

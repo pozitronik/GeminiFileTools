@@ -10,7 +10,9 @@ interface
 uses
 	System.SysUtils,
 	System.IOUtils,
+	{$IFNDEF WCX_PLUGIN}
 	System.Threading,
+	{$ENDIF}
 	System.Generics.Collections,
 	GeminiFile.Types,
 	GeminiFile.Model;
@@ -78,6 +80,7 @@ begin
 	ForceDirectories(LAbsDir);
 	LPadWidth := ResourcePadWidth(Result);
 
+	{$IFNDEF WCX_PLUGIN}
 	if AThreaded and (Result > 1) then
 	begin
 		TParallel.&For(0, Result - 1,
@@ -90,7 +93,9 @@ begin
 				if Assigned(AOnProgress) then
 					AOnProgress(AIdx, Length(AResources), LFN);
 			end);
-	end else begin
+	end else
+	{$ENDIF}
+	begin
 		for I := 0 to Result - 1 do
 		begin
 			LFileName := MakeResourceFileName(LAbsDir, ANamePrefix, LPadWidth, I, AResources[I].GetFileExtension);
