@@ -1082,6 +1082,12 @@ begin
 		Exit;
 
 	ADC := CreateCompatibleDC(0);
+	if ADC = 0 then
+	begin
+		DeleteObject(Result);
+		Result := 0;
+		Exit;
+	end;
 	SelectObject(ADC, Result);
 
 	// Fill background
@@ -1279,7 +1285,9 @@ var
 	LTextBytes: TBytesStream;
 	LRawText: UTF8String;
 	LRESULT: string;
-	LBackslash: Byte;
+	LHexBuf: array[0..3] of Byte;
+	LCodePoint: Integer;
+	LUtf8: UTF8String;
 begin
 	Result := '';
 	LRoleMarker := RawByteString('"role"');
@@ -1379,25 +1387,33 @@ begin
 					Break;
 				if LByte = Ord('\') then
 				begin
-					// Escaped character
+					// JSON escape sequence
 					if LStream.Position >= LStream.Size then
 						Break;
 					LStream.ReadBuffer(LByte, 1);
 					case Chr(LByte) of
-						'n':
-							LByte := Ord(#10);
-						't':
-							LByte := Ord(#9);
-						'\':
-							; // LByte already holds backslash
-						'"':
-							; // LByte already holds quote
-						'/':
-							; // LByte already holds slash
-						else
-							// Unknown escape -- write backslash then the escaped char
-							LBackslash := Ord('\');
-							LTextBytes.WriteBuffer(LBackslash, 1);
+						'n': LByte := Ord(#10);
+						'r': LByte := Ord(#13);
+						't': LByte := Ord(#9);
+						'b': LByte := Ord(#8);
+						'f': LByte := Ord(#12);
+						'\', '"', '/': ; // LByte already holds the literal character
+						'u':
+							begin
+								// \uXXXX Unicode escape
+								if LStream.Position + 4 > LStream.Size then
+									Break;
+								LStream.ReadBuffer(LHexBuf[0], 4);
+								LCodePoint := StrToIntDef('$' + Chr(LHexBuf[0]) + Chr(LHexBuf[1]) + Chr(LHexBuf[2]) + Chr(LHexBuf[3]), -1);
+								if LCodePoint >= 0 then
+								begin
+									LUtf8 := UTF8Encode(WideString(WideChar(LCodePoint)));
+									LTextBytes.WriteBuffer(LUtf8[1], Length(LUtf8));
+								end;
+								Continue; // already written, skip the WriteBuffer below
+							end;
+					else
+						// Unknown escape -- preserve the escaped character only
 					end;
 				end;
 				LTextBytes.WriteBuffer(LByte, 1);
