@@ -2,10 +2,11 @@
 
 A set of tools for parsing, viewing, and extracting data from Google Gemini AI Studio conversation files. Written in Delphi (Object Pascal), framework-independent (no VCL/FMX), with zero external dependencies.
 
-Two deliverables share the same core library:
+Three deliverables share the same core library:
 
 - **GemView** — a command-line application for inspecting and extracting Gemini files
-- **Gemini WCX** — a Total Commander plugin that presents Gemini files as virtual archives
+- **Gemini WCX** — a Total Commander packer plugin that presents Gemini files as virtual archives
+- **Gemini WLX** — a Total Commander lister plugin that renders Gemini conversations as HTML in an embedded WebView2 control
 
 ## Gemini File Format
 
@@ -200,6 +201,63 @@ body {
 
 See the included `gemini.css` file for a complete dark theme example and other override snippets.
 
+## Gemini WLX — Total Commander Lister Plugin
+
+The WLX plugin renders Gemini conversation files as formatted HTML directly in Total Commander's built-in viewer (F3) and quick view panel (Ctrl+Q). It uses an embedded WebView2 (Microsoft Edge) control for rendering.
+
+### Features
+
+- Renders conversations as styled HTML with embedded images, thinking blocks, and interactive controls
+- In-page text search via Total Commander's search dialog
+- Keyboard transparency — unmodified keys (Esc, N, P, and other TC hotkeys) pass through to Total Commander even when the viewer has focus; modifier combinations (Ctrl+C, Ctrl+A, Ctrl+scroll zoom) are handled by WebView2
+- Custom CSS override support (same selectors as the WCX HTML output)
+
+### Requirements
+
+- Microsoft Edge WebView2 Runtime (pre-installed on Windows 10/11)
+- `WebView2Loader.dll` — place in a `webview2x64` or `webview2x32` subfolder next to the plugin DLL, or in the plugin directory itself, or rely on the system search path
+
+### Installation
+
+1. Build the plugin from source or obtain the compiled `gemini.wlx` (32-bit) / `gemini.wlx64` (64-bit)
+2. In Total Commander, go to *Configuration* > *Options* > *Plugins* > *Lister plugins (WLX)*
+3. Click *Add* and select the `.wlx` / `.wlx64` file
+4. The plugin auto-detects Gemini files by looking for `runSettings` and `models/gemini` in the first 8 KB of the file
+
+### Configuration
+
+The WLX plugin reads configuration from two optional files placed next to the plugin DLL:
+
+- `gemini.ini` — behavioral and WebView2 settings
+- `gemini.css` — CSS overrides for HTML output (same selectors as the WCX plugin)
+
+#### gemini.ini
+
+All settings are optional. Defaults are used when a key is absent or the file does not exist.
+
+##### [General]
+
+| Key                | Default | Description                                                      |
+|--------------------|---------|------------------------------------------------------------------|
+| `HideEmptyBlocks`  | `1`     | Hide empty display blocks (no text, no embedded resource)        |
+| `CombineBlocks`    | `0`     | Combine consecutive same-kind blocks into a single visual block  |
+| `RenderMarkdown`   | `1`     | Render Markdown formatting in model output as HTML               |
+
+##### [HtmlDefaults]
+
+| Key                       | Default | Description                                                |
+|---------------------------|---------|------------------------------------------------------------|
+| `DefaultFullWidth`        | `0`     | Start in full-width mode (toggleable via controls panel)   |
+| `DefaultExpandThinking`   | `0`     | Start thinking blocks expanded (toggleable via controls)   |
+
+##### [WebView2]
+
+| Key                 | Default              | Description                                      |
+|---------------------|----------------------|--------------------------------------------------|
+| `UserDataFolder`    | `%TEMP%\gemini_wlx`  | WebView2 browser profile storage location        |
+| `AllowContextMenu`  | `0`                  | Allow right-click context menu in the viewer     |
+| `AllowDevTools`     | `0`                  | Allow opening DevTools (F12) in the viewer       |
+
 ## Building from Source
 
 ### Requirements
@@ -222,9 +280,15 @@ src/                              Core library (framework-independent)
   GeminiFile.Markdown.pas         Markdown-to-HTML renderer
   GeminiFile.pas                  Facade (re-exports all types)
 app/                              GemView console application
-wcx/                              Total Commander WCX plugin
+wcx/                              Total Commander WCX packer plugin
   GeminiWcx.pas                   Plugin logic
   WcxApi.pas                      WCX SDK types
+  gemini.dpr                      DLL project
+  gemini.ini                      Example configuration
+  gemini.css                      Example CSS overrides
+wlx/                              Total Commander WLX lister plugin
+  GeminiWlx.pas                   Plugin logic (WebView2 integration)
+  WlxApi.pas                      WLX SDK types
   gemini.dpr                      DLL project
   gemini.ini                      Example configuration
   gemini.css                      Example CSS overrides
