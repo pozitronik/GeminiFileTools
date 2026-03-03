@@ -90,6 +90,20 @@ type
 		function Invoke(errorCode: HResult; const createdController: ICoreWebView2Controller): HResult; stdcall;
 	end;
 
+	/// <summary>
+	///   Intercepts keyboard events before WebView2 processes them.
+	///   Forwards unmodified keys (Esc, N, P, etc.) to TC's parent window
+	///   so lister hotkeys keep working when WebView2 has focus.
+	/// </summary>
+	TAcceleratorKeyPressedHandler = class(TInterfacedObject, ICoreWebView2AcceleratorKeyPressedEventHandler)
+	private
+		FParentWin: HWND;
+	public
+		constructor Create(AParentWin: HWND);
+		function Invoke(const sender: ICoreWebView2Controller;
+			const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
+	end;
+
 function GetListerConfig: TListerConfig;
 procedure DebugLog(const ACategory, AMessage: string);
 
@@ -393,11 +407,6 @@ begin
 end;
 
 destructor TGeminiListerWindow.Destroy;
-var
-	LMsg: TMsg;
-	LStart: Cardinal;
-	LWaitResult: DWORD;
-	LElapsed: Cardinal;
 begin
 	DebugLog('Window', 'Destroy enter, plugin=0x' + IntToHex(FPluginWin, 8));
 
@@ -407,32 +416,9 @@ begin
 		FController.Close;
 	end;
 
-	// Release WebView2 interfaces so the environment can begin shutdown.
 	FWebView := nil;
 	FController := nil;
 	FEnvironment := nil;
-
-	// Pump messages so WebView2 can complete its async COM cleanup
-	// while our DLL code is still mapped. MsgWaitForMultipleObjects
-	// blocks until a message arrives (or timeout), unlike PeekMessage
-	// which returns immediately when the queue is empty.
-	DebugLog('Window', 'Pumping messages for WebView2 cleanup');
-	LStart := GetTickCount;
-	while True do
-	begin
-		LElapsed := GetTickCount - LStart;
-		if LElapsed >= 2000 then
-			Break;
-		LWaitResult := MsgWaitForMultipleObjects(0, Pointer(nil)^, False, 2000 - LElapsed, QS_ALLINPUT);
-		if LWaitResult = WAIT_TIMEOUT then
-			Break;
-		while PeekMessage(LMsg, 0, 0, 0, PM_REMOVE) do
-		begin
-			TranslateMessage(LMsg);
-			DispatchMessage(LMsg);
-		end;
-	end;
-	DebugLog('Window', 'Message pump done, elapsed=' + IntToStr(GetTickCount - LStart) + 'ms');
 
 	CleanupTempFile;
 	DebugLog('Window', 'Destroy leave');
@@ -701,6 +687,12 @@ begin
 		LSettings.Set_IsStatusBarEnabled(0);
 	end;
 
+	// Forward unmodified keys from WebView2 to TC parent window
+	var LToken: EventRegistrationToken;
+	createdController.add_AcceleratorKeyPressed(
+		TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
+	DebugLog('CtrlCallback', 'AcceleratorKeyPressed handler registered');
+
 	// Size the WebView2 to fill the plugin window
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
 	createdController.Set_Bounds(LRect);
@@ -718,6 +710,42 @@ begin
 	end;
 
 	Result := S_OK;
+end;
+
+// ========================================================================
+// TAcceleratorKeyPressedHandler
+// ========================================================================
+
+constructor TAcceleratorKeyPressedHandler.Create(AParentWin: HWND);
+begin
+	inherited Create;
+	FParentWin := AParentWin;
+end;
+
+function TAcceleratorKeyPressedHandler.Invoke(const sender: ICoreWebView2Controller;
+	const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
+var
+	LKind: COREWEBVIEW2_KEY_EVENT_KIND;
+	LKey: SYSUINT;
+begin
+	Result := S_OK;
+
+	if Failed(args.Get_KeyEventKind(LKind)) then
+		Exit;
+	// Only intercept key-down events
+	if LKind <> COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN then
+		Exit;
+
+	// Let WebView2 handle keys when any modifier is held (Ctrl+C, Ctrl+A, etc.)
+	if (GetKeyState(VK_CONTROL) < 0) or (GetKeyState(VK_MENU) < 0) or (GetKeyState(VK_SHIFT) < 0) then
+		Exit;
+
+	if Failed(args.Get_VirtualKey(LKey)) then
+		Exit;
+
+	// Forward unmodified keys to TC parent so lister hotkeys work
+	args.Set_Handled(1);
+	PostMessage(FParentWin, WM_KEYDOWN, LKey, 0);
 end;
 
 // ========================================================================
