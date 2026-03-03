@@ -61,6 +61,7 @@ type
 		// Callbacks
 		FProcessDataProc: TProcessDataProcW;
 		FChangeVolProc: TChangeVolProcW;
+		procedure AddVirtualFile(const APath: string; AKind: TVirtualFileKind; ASize: Int64; AResourceIndex: Integer = -1);
 		procedure BuildVirtualFileList;
 		procedure BuildResourceInfos;
 		function IsThinkingResource(AChunkIndex: Integer): Boolean;
@@ -418,9 +419,21 @@ begin
 		Inc(Result, (FResourceInfos[I].DecodedSize * 4) div 3 + 100);
 end;
 
-procedure TGeminiArchive.BuildVirtualFileList;
+procedure TGeminiArchive.AddVirtualFile(const APath: string; AKind: TVirtualFileKind; ASize: Int64; AResourceIndex: Integer);
 var
 	LEntry: TVirtualFileEntry;
+begin
+	LEntry := Default (TVirtualFileEntry);
+	LEntry.Path := APath;
+	LEntry.Kind := AKind;
+	LEntry.UnpackedSize := ASize;
+	LEntry.FileTime := FFileTime;
+	LEntry.ResourceIndex := AResourceIndex;
+	FVirtualFiles.Add(LEntry);
+end;
+
+procedure TGeminiArchive.BuildVirtualFileList;
+var
 	I: Integer;
 	LHasThinkingResources: Boolean;
 	LConfig: TPluginConfig;
@@ -428,59 +441,19 @@ begin
 	FVirtualFiles.Clear;
 	LConfig := GetPluginConfig;
 
-	// conversation.txt (or originalname.txt)
 	if LConfig.EnableText then
-	begin
-		LEntry := Default (TVirtualFileEntry);
-		LEntry.Path := FBaseName + '.txt';
-		LEntry.Kind := vfConversationText;
-		LEntry.UnpackedSize := Length(FCachedText);
-		LEntry.FileTime := FFileTime;
-		FVirtualFiles.Add(LEntry);
-	end;
-
-	// conversation.md (or originalname.md)
+		AddVirtualFile(FBaseName + '.txt', vfConversationText, Length(FCachedText));
 	if LConfig.EnableMarkdown then
-	begin
-		LEntry := Default (TVirtualFileEntry);
-		LEntry.Path := FBaseName + '.md';
-		LEntry.Kind := vfConversationMarkdown;
-		LEntry.UnpackedSize := Length(FCachedMarkdown);
-		LEntry.FileTime := FFileTime;
-		FVirtualFiles.Add(LEntry);
-	end;
-
-	// conversation.html (or originalname.html)
+		AddVirtualFile(FBaseName + '.md', vfConversationMarkdown, Length(FCachedMarkdown));
 	if LConfig.EnableHtml then
-	begin
-		LEntry := Default (TVirtualFileEntry);
-		LEntry.Path := FBaseName + '.html';
-		LEntry.Kind := vfConversationHtml;
-		LEntry.UnpackedSize := Length(FCachedHtml);
-		LEntry.FileTime := FFileTime;
-		FVirtualFiles.Add(LEntry);
-	end;
+		AddVirtualFile(FBaseName + '.html', vfConversationHtml, Length(FCachedHtml));
 
 	if Length(FResources) > 0 then
 	begin
-		// conversation_full.html (or originalname_full.html, embedded)
 		if LConfig.EnableHtmlEmbedded then
-		begin
-			LEntry := Default (TVirtualFileEntry);
-			LEntry.Path := FBaseName + '_full.html';
-			LEntry.Kind := vfConversationHtmlEmbedded;
-			LEntry.UnpackedSize := EstimateEmbeddedHtmlSize;
-			LEntry.FileTime := FFileTime;
-			FVirtualFiles.Add(LEntry);
-		end;
+			AddVirtualFile(FBaseName + '_full.html', vfConversationHtmlEmbedded, EstimateEmbeddedHtmlSize);
 
-		// resources\ directory
-		LEntry := Default (TVirtualFileEntry);
-		LEntry.Path := 'resources';
-		LEntry.Kind := vfResourceDir;
-		LEntry.UnpackedSize := 0;
-		LEntry.FileTime := FFileTime;
-		FVirtualFiles.Add(LEntry);
+		AddVirtualFile('resources', vfResourceDir, 0);
 
 		// resources\think\ subdirectory (only if thinking resources exist)
 		LHasThinkingResources := False;
@@ -491,26 +464,11 @@ begin
 				Break;
 			end;
 		if LHasThinkingResources then
-		begin
-			LEntry := Default (TVirtualFileEntry);
-			LEntry.Path := 'resources\think';
-			LEntry.Kind := vfResourceDir;
-			LEntry.UnpackedSize := 0;
-			LEntry.FileTime := FFileTime;
-			FVirtualFiles.Add(LEntry);
-		end;
+			AddVirtualFile('resources\think', vfResourceDir, 0);
 
 		// Individual resources -- paths derived from FResourceInfos (single source of truth)
 		for I := 0 to High(FResourceInfos) do
-		begin
-			LEntry := Default (TVirtualFileEntry);
-			LEntry.Path := StringReplace(FResourceInfos[I].FileName, '/', '\', [rfReplaceAll]);
-			LEntry.Kind := vfResource;
-			LEntry.UnpackedSize := FResourceInfos[I].DecodedSize;
-			LEntry.FileTime := FFileTime;
-			LEntry.ResourceIndex := I;
-			FVirtualFiles.Add(LEntry);
-		end;
+			AddVirtualFile(StringReplace(FResourceInfos[I].FileName, '/', '\', [rfReplaceAll]), vfResource, FResourceInfos[I].DecodedSize, I);
 	end;
 end;
 
@@ -755,10 +713,19 @@ begin
 end;
 
 function CanYouHandleThisFileW(FileName: PWideChar): LongBool; stdcall;
+const
+	/// Read enough to find "runSettings" even when preceded by large whitespace or BOM
+	SNIFF_SIZE = 8192;
+	MARKER: UTF8String = 'runSettings';
 var
 	LStream: TFileStream;
+	LBuf: TBytes;
+	LBytesRead: Integer;
 	LByte: Byte;
 	LBom: array [0 .. 1] of Byte;
+	LFoundBrace: Boolean;
+	I, J: Integer;
+	LMarkerLen: Integer;
 begin
 	Result := False;
 	try
@@ -770,18 +737,42 @@ begin
 				if (LStream.Read(LBom, 2) = 2) and (LBom[0] = $BB) and (LBom[1] = $BF) then
 					{BOM consumed, stream at position 3}
 				else
-					LStream.Position := 0; // Not a BOM, rewind
+					LStream.Position := 0;
 			end
 			else
 				LStream.Position := 0;
 
 			// Skip whitespace, look for '{'
+			LFoundBrace := False;
 			while LStream.Read(LByte, 1) = 1 do
 			begin
 				if LByte in [$09, $0A, $0D, $20] then
 					Continue;
-				Result := LByte = Ord('{');
+				LFoundBrace := LByte = Ord('{');
 				Break;
+			end;
+
+			if not LFoundBrace then
+				Exit;
+
+			// Read first SNIFF_SIZE bytes and look for "runSettings" marker
+			LStream.Position := 0;
+			SetLength(LBuf, SNIFF_SIZE);
+			LBytesRead := LStream.Read(LBuf[0], SNIFF_SIZE);
+			if LBytesRead <= 0 then
+				Exit;
+
+			LMarkerLen := Length(MARKER);
+			for I := 0 to LBytesRead - LMarkerLen do
+			begin
+				J := 0;
+				while (J < LMarkerLen) and (LBuf[I + J] = Ord(MARKER[J + 1])) do
+					Inc(J);
+				if J = LMarkerLen then
+				begin
+					Result := True;
+					Exit;
+				end;
 			end;
 		finally
 			LStream.Free;

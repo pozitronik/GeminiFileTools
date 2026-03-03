@@ -129,7 +129,9 @@ type
 		[Test]
 		procedure GetBackgroundFlags_ReturnsBackgroundUnpack;
 		[Test]
-		procedure CanYouHandleThisFileW_ValidJson_ReturnsTrue;
+		procedure CanYouHandleThisFileW_GeminiJson_ReturnsTrue;
+		[Test]
+		procedure CanYouHandleThisFileW_NonGeminiJson_ReturnsFalse;
 		[Test]
 		procedure CanYouHandleThisFileW_NonJson_ReturnsFalse;
 		[Test]
@@ -915,12 +917,21 @@ begin
 	Assert.AreEqual<Integer>(BACKGROUND_UNPACK, GetBackgroundFlags);
 end;
 
-procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_ValidJson_ReturnsTrue;
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_GeminiJson_ReturnsTrue;
 var
 	LPath: string;
 begin
-	LPath := CreateTempFile('valid.json', '{"chunkedPrompt":{"chunks":[]}}');
+	LPath := CreateTempFile('valid.json', '{"runSettings":{"model":"models/gemini-2.0-flash"},"chunkedPrompt":{"chunks":[]}}');
 	Assert.IsTrue(CanYouHandleThisFileW(PWideChar(LPath)));
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_NonGeminiJson_ReturnsFalse;
+var
+	LPath: string;
+begin
+	// Generic JSON without Gemini markers should be rejected
+	LPath := CreateTempFile('package.json', '{"name":"my-app","version":"1.0.0"}');
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)));
 end;
 
 procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_NonJson_ReturnsFalse;
@@ -944,8 +955,8 @@ var
 	LPath: string;
 	LBytes, LJson: TBytes;
 begin
-	// UTF-8 BOM (EF BB BF) followed by JSON object
-	LJson := TEncoding.UTF8.GetBytes('{"test":true}');
+	// UTF-8 BOM (EF BB BF) followed by Gemini JSON
+	LJson := TEncoding.UTF8.GetBytes('{"runSettings":{"model":"models/gemini-2.0-flash"}}');
 	SetLength(LBytes, 3 + Length(LJson));
 	LBytes[0] := $EF;
 	LBytes[1] := $BB;
@@ -960,8 +971,8 @@ procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_WithWhitespace_Returns
 var
 	LPath: string;
 begin
-	// Leading whitespace (tab, LF, CR, spaces) before JSON
-	LPath := CreateTempFile('spaces.json', #9#10#13'  {"test":true}');
+	// Leading whitespace (tab, LF, CR, spaces) before Gemini JSON
+	LPath := CreateTempFile('spaces.json', #9#10#13'  {"runSettings":{}}');
 	Assert.IsTrue(CanYouHandleThisFileW(PWideChar(LPath)));
 end;
 
@@ -1442,7 +1453,7 @@ var
 	LPath: string;
 	LAnsiPath: AnsiString;
 begin
-	LPath := CreateTempFile('ansi_test.json', '{"test":true}');
+	LPath := CreateTempFile('ansi_test.json', '{"runSettings":{}}');
 	LAnsiPath := AnsiString(LPath);
 	Assert.IsTrue(CanYouHandleThisFile(PAnsiChar(LAnsiPath)));
 end;
