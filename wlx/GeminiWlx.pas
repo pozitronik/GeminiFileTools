@@ -1082,7 +1082,7 @@ end;
 
 procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
 const
-	DETECT = 'FINDI("runSettings") & FINDI("models/gemini")';
+	DETECT = 'FINDI("runSettings") & FINDI("models/")';
 begin
 	System.AnsiStrings.StrLCopy(DetectString, PAnsiChar(AnsiString(DETECT)), MaxLen - 1);
 end;

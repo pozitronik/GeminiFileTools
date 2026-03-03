@@ -222,7 +222,7 @@ The WLX plugin renders Gemini conversation files as formatted HTML directly in T
 1. Build the plugin from source or obtain the compiled `gemini.wlx` (32-bit) / `gemini.wlx64` (64-bit)
 2. In Total Commander, go to *Configuration* > *Options* > *Plugins* > *Lister plugins (WLX)*
 3. Click *Add* and select the `.wlx` / `.wlx64` file
-4. The plugin auto-detects Gemini files by looking for `runSettings` and `models/gemini` in the first 8 KB of the file
+4. The plugin auto-detects Gemini files by looking for `runSettings` and `models/` in the first 8 KB of the file
 
 ### Configuration
 
