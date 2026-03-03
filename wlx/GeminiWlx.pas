@@ -885,7 +885,7 @@ end;
 
 procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
 const
-	DETECT = 'FINDI("chunkedPrompt")';
+	DETECT = 'FINDI("runSettings") & FINDI("models/gemini")';
 begin
 	DebugLog('ListGetDetectString', 'called, maxLen=' + IntToStr(MaxLen));
 	System.AnsiStrings.StrLCopy(DetectString, PAnsiChar(AnsiString(DETECT)), MaxLen - 1);
