@@ -70,39 +70,52 @@ function GroupConsecutiveChunks(AChunks: TObjectList<TGeminiChunk>; ACombine: Bo
 var
 	LGroups: TList<TChunkGroup>;
 	LGroup: TChunkGroup;
+	LChunkAccum: TList<TGeminiChunk>;
 	LChunk: TGeminiChunk;
 	LKind: TChunkGroupKind;
 	I: Integer;
+
+	/// Finalizes the current accumulator into a group record and appends it.
+	procedure FlushGroup;
+	begin
+		if LChunkAccum.Count = 0 then
+			Exit;
+		LGroup.Chunks := LChunkAccum.ToArray;
+		LGroups.Add(LGroup);
+		LChunkAccum.Clear;
+	end;
+
 begin
 	LGroups := TList<TChunkGroup>.Create;
+	LChunkAccum := TList<TGeminiChunk>.Create;
 	try
 		for I := 0 to AChunks.Count - 1 do
 		begin
 			LChunk := AChunks[I];
 			LKind := GetChunkGroupKind(LChunk);
 
-			if ACombine and (LGroups.Count > 0) and (LGroups.Last.Kind = LKind) then
+			if ACombine and (LChunkAccum.Count > 0) and (LGroup.Kind = LKind) then
 			begin
-				// Extend current group
-				LGroup := LGroups.Last;
-				LGroup.Chunks := LGroup.Chunks + [LChunk];
+				// Extend current group -- O(1) list append instead of array concat
+				LChunkAccum.Add(LChunk);
 				Inc(LGroup.TotalTokenCount, LChunk.TokenCount);
 				if (LGroup.FirstCreateTime = 0) and (LChunk.CreateTime <> 0) then
 					LGroup.FirstCreateTime := LChunk.CreateTime;
-				LGroups[LGroups.Count - 1] := LGroup;
 			end else begin
-				// Start new group
+				// Finalize previous group and start a new one
+				FlushGroup;
 				LGroup := Default (TChunkGroup);
 				LGroup.Kind := LKind;
-				LGroup.Chunks := [LChunk];
 				LGroup.FirstCreateTime := LChunk.CreateTime;
 				LGroup.TotalTokenCount := LChunk.TokenCount;
-				LGroups.Add(LGroup);
+				LChunkAccum.Add(LChunk);
 			end;
 		end;
 
+		FlushGroup;
 		Result := LGroups.ToArray;
 	finally
+		LChunkAccum.Free;
 		LGroups.Free;
 	end;
 end;
