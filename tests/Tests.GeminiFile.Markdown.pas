@@ -1,6 +1,7 @@
 /// <summary>
 ///   Unit tests for the Markdown-to-HTML converter.
-///   Covers inline formatting, code blocks, paragraph handling, and edge cases.
+///   Covers headings, inline formatting, code blocks, paragraph handling,
+///   and edge cases.
 /// </summary>
 unit Tests.GeminiFile.Markdown;
 
@@ -57,6 +58,28 @@ type
 		procedure UnclosedInlineCode_BacktickPassesThrough;
 		[Test]
 		procedure PureCR_NormalizedToLF;
+		[Test]
+		procedure Heading1_H1Tag;
+		[Test]
+		procedure Heading2_H2Tag;
+		[Test]
+		procedure Heading3_H3Tag;
+		[Test]
+		procedure Heading6_H6Tag;
+		[Test]
+		procedure HeadingWithInlineFormatting_FormattingApplied;
+		[Test]
+		procedure HeadingNoSpaceAfterHash_TreatedAsProse;
+		[Test]
+		procedure HeadingSevenHashes_TreatedAsProse;
+		[Test]
+		procedure HeadingBetweenParagraphs_FlushesProseCorrectly;
+		[Test]
+		procedure HeadingBeforeCodeBlock_BothRendered;
+		[Test]
+		procedure MultipleHeadings_AllRendered;
+		[Test]
+		procedure HeadingWithLeadingWhitespace_StillDetected;
 	end;
 
 implementation
@@ -253,6 +276,109 @@ begin
 	// Old Mac CR-only line endings should be normalized and treated as line breaks
 	LResult := MarkdownToHtml('Line one' + #13 + 'Line two');
 	Assert.Contains(LResult, 'Line one<br>Line two');
+end;
+
+procedure TTestMarkdownToHtml.Heading1_H1Tag;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('# Main Title');
+	Assert.AreEqual('<h1>Main Title</h1>', LResult);
+end;
+
+procedure TTestMarkdownToHtml.Heading2_H2Tag;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('## Section');
+	Assert.AreEqual('<h2>Section</h2>', LResult);
+end;
+
+procedure TTestMarkdownToHtml.Heading3_H3Tag;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('### Subsection');
+	Assert.AreEqual('<h3>Subsection</h3>', LResult);
+end;
+
+procedure TTestMarkdownToHtml.Heading6_H6Tag;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('###### Deepest');
+	Assert.AreEqual('<h6>Deepest</h6>', LResult);
+end;
+
+procedure TTestMarkdownToHtml.HeadingWithInlineFormatting_FormattingApplied;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('## **Bold** and `code` heading');
+	Assert.Contains(LResult, '<h2>');
+	Assert.Contains(LResult, '<strong>Bold</strong>');
+	Assert.Contains(LResult, '<code>code</code>');
+	Assert.Contains(LResult, '</h2>');
+end;
+
+procedure TTestMarkdownToHtml.HeadingNoSpaceAfterHash_TreatedAsProse;
+var
+	LResult: string;
+begin
+	// '#word' without a space after # is not a heading
+	LResult := MarkdownToHtml('#hashtag');
+	Assert.IsFalse(LResult.Contains('<h1>'), 'No space after # should not produce heading');
+	Assert.Contains(LResult, '#hashtag');
+end;
+
+procedure TTestMarkdownToHtml.HeadingSevenHashes_TreatedAsProse;
+var
+	LResult: string;
+begin
+	// ####### (7 hashes) exceeds h6, should be prose
+	LResult := MarkdownToHtml('####### Not a heading');
+	Assert.IsFalse(LResult.Contains('<h7>'), 'Seven hashes should not produce heading');
+	Assert.Contains(LResult, '####### Not a heading');
+end;
+
+procedure TTestMarkdownToHtml.HeadingBetweenParagraphs_FlushesProseCorrectly;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('Before text' + #10 + '## Heading' + #10 + 'After text');
+	Assert.Contains(LResult, '<p>Before text</p>');
+	Assert.Contains(LResult, '<h2>Heading</h2>');
+	Assert.Contains(LResult, '<p>After text</p>');
+end;
+
+procedure TTestMarkdownToHtml.HeadingBeforeCodeBlock_BothRendered;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('## Example' + #10 + '```' + #10 + 'code' + #10 + '```');
+	Assert.Contains(LResult, '<h2>Example</h2>');
+	Assert.Contains(LResult, '<pre><code>code</code></pre>');
+end;
+
+procedure TTestMarkdownToHtml.MultipleHeadings_AllRendered;
+var
+	LResult: string;
+begin
+	LResult := MarkdownToHtml('# Title' + #10 + 'Intro' + #10 + '## Part 1' + #10 + 'Text' + #10 + '## Part 2');
+	Assert.Contains(LResult, '<h1>Title</h1>');
+	Assert.Contains(LResult, '<h2>Part 1</h2>');
+	Assert.Contains(LResult, '<h2>Part 2</h2>');
+	Assert.Contains(LResult, '<p>Intro</p>');
+	Assert.Contains(LResult, '<p>Text</p>');
+end;
+
+procedure TTestMarkdownToHtml.HeadingWithLeadingWhitespace_StillDetected;
+var
+	LResult: string;
+begin
+	// Leading spaces should not prevent heading detection
+	LResult := MarkdownToHtml('  ## Indented Heading');
+	Assert.Contains(LResult, '<h2>Indented Heading</h2>');
 end;
 
 initialization

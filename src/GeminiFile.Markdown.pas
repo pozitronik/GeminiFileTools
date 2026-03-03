@@ -1,7 +1,7 @@
 /// <summary>
 ///   Lightweight Markdown-to-HTML converter for Gemini model output.
-///   Handles inline formatting (bold, italic, code, strikethrough) and
-///   fenced code blocks. No regex, no external dependencies -- pure string
+///   Handles headings, inline formatting (bold, italic, code, strikethrough)
+///   and fenced code blocks. No regex, no external dependencies -- pure string
 ///   scanning suitable for DLL/plugin use.
 /// </summary>
 unit GeminiFile.Markdown;
@@ -10,8 +10,9 @@ interface
 
 /// <summary>
 ///   Converts a subset of Markdown to HTML.
-///   Supported: bold (**), italic (*), bold-italic (***), inline code (`),
-///   strikethrough (~~), fenced code blocks (```), paragraphs, line breaks.
+///   Supported: headings (# through ######), bold (**), italic (*),
+///   bold-italic (***), inline code (`), strikethrough (~~),
+///   fenced code blocks (```), paragraphs, line breaks.
 /// </summary>
 /// <param name="AText">Raw Markdown text from Gemini model output.</param>
 /// <returns>HTML string with formatting applied. Empty input returns empty string.</returns>
@@ -197,6 +198,25 @@ begin
 end;
 
 /// <summary>
+///   Applies the full inline formatting pipeline to a text fragment:
+///   inline code extraction, HTML escaping, marker application, code restoration.
+///   Shared by prose paragraphs and heading text.
+/// </summary>
+function FormatInline(const AText: string): string;
+var
+	LPlaceholders: TArray<TCodePlaceholder>;
+begin
+	Result := AText;
+	ExtractInlineCode(Result, LPlaceholders);
+	Result := HtmlEscape(Result);
+	ApplyInlineMarker(Result, '***', '<strong><em>', '</em></strong>');
+	ApplyInlineMarker(Result, '**', '<strong>', '</strong>');
+	ApplyInlineMarker(Result, '~~', '<del>', '</del>');
+	ApplyInlineMarker(Result, '*', '<em>', '</em>');
+	RestoreInlineCode(Result, LPlaceholders);
+end;
+
+/// <summary>
 ///   Processes a single prose section (non-code-block text).
 ///   Splits into paragraphs on double newlines, applies inline formatting,
 ///   wraps in p tags, converts single newlines to br.
@@ -206,7 +226,6 @@ var
 	LParagraphs: TArray<string>;
 	I: Integer;
 	LPara: string;
-	LPlaceholders: TArray<TCodePlaceholder>;
 	LResult: string;
 begin
 	if AText = '' then
@@ -228,20 +247,7 @@ begin
 		if Trim(LPara) = '' then
 			Continue;
 
-		// Extract inline code first (protects code content from formatting)
-		ExtractInlineCode(LPara, LPlaceholders);
-
-		// HTML-escape the remaining text
-		LPara := HtmlEscape(LPara);
-
-		// Apply inline markers longest-first to avoid conflicts
-		ApplyInlineMarker(LPara, '***', '<strong><em>', '</em></strong>');
-		ApplyInlineMarker(LPara, '**', '<strong>', '</strong>');
-		ApplyInlineMarker(LPara, '~~', '<del>', '</del>');
-		ApplyInlineMarker(LPara, '*', '<em>', '</em>');
-
-		// Restore inline code placeholders
-		RestoreInlineCode(LPara, LPlaceholders);
+		LPara := FormatInline(LPara);
 
 		// Single newlines become <br>
 		LPara := StringReplace(LPara, #10, '<br>', [rfReplaceAll]);
@@ -262,6 +268,7 @@ var
 	LProseAccum: string;
 	LResult: string;
 	LLine, LTrimmed: string;
+	LLevel: Integer;
 begin
 	if AText = '' then
 		Exit('');
@@ -320,14 +327,34 @@ begin
 		begin
 			// Accumulate code content with original line endings
 			LCodeContent := LCodeContent + LLine + #10;
-		end
-		else
-		begin
-			// Accumulate prose lines
-			if LProseAccum <> '' then
-				LProseAccum := LProseAccum + #10;
-			LProseAccum := LProseAccum + LLine;
+			Continue;
 		end;
+
+		// Check for ATX heading (# through ######, must be followed by a space)
+		if (Length(LTrimmed) >= 2) and (LTrimmed[1] = '#') then
+		begin
+			LLevel := 0;
+			while (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = '#') do
+				Inc(LLevel);
+			if (LLevel <= 6) and (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = ' ') then
+			begin
+				// Flush accumulated prose
+				if LProseAccum <> '' then
+				begin
+					LResult := LResult + ProcessProse(LProseAccum);
+					LProseAccum := '';
+				end;
+				LResult := LResult + '<h' + IntToStr(LLevel) + '>' +
+					FormatInline(Trim(Copy(LTrimmed, LLevel + 2, MaxInt))) +
+					'</h' + IntToStr(LLevel) + '>';
+				Continue;
+			end;
+		end;
+
+		// Accumulate prose lines
+		if LProseAccum <> '' then
+			LProseAccum := LProseAccum + #10;
+		LProseAccum := LProseAccum + LLine;
 	end;
 
 	// Handle unclosed code block (treat as prose)

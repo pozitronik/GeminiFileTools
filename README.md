@@ -92,7 +92,7 @@ The `<name>` part uses the original Gemini file name by default. This can be cha
 - Embedded or linked images
 - System instruction display
 - Floating controls panel for toggling full-width mode, expanding/collapsing all thinking blocks, and toggling Markdown rendering
-- Markdown rendering in model output (bold, italic, code, code blocks, strikethrough)
+- Markdown rendering in model output (headings, bold, italic, code, code blocks, strikethrough)
 - Custom CSS override support
 
 **HTML Embedded** — Same as HTML but with all images embedded as base64 data URIs, producing a fully self-contained single file. Only generated when the conversation contains embedded resources.
@@ -145,7 +145,7 @@ When empty blocks are hidden, chunks with no text and no embedded resource are s
 |-------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `DefaultFullWidth`      | `0`     | Start the HTML page in full-width mode (no max-width column). The user can still toggle via the floating controls panel.                                                                   |
 | `DefaultExpandThinking` | `0`     | Start thinking blocks expanded instead of collapsed. The user can still toggle via the floating controls panel.                                                                            |
-| `RenderMarkdown`        | `1`     | Render Markdown formatting in model output as HTML. Supports: bold (`**`), italic (`*`), bold-italic (`***`), inline code (`` ` ``), strikethrough (`~~`), fenced code blocks (`` ``` ``). |
+| `RenderMarkdown`        | `1`     | Render Markdown formatting in model output as HTML. Supports: headings (`#` through `######`), bold (`**`), italic (`*`), bold-italic (`***`), inline code (`` ` ``), strikethrough (`~~`), fenced code blocks (`` ``` ``). |
 
 ### gemini.css
 
