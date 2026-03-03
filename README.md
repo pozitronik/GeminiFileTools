@@ -208,6 +208,7 @@ The WLX plugin renders Gemini conversation files as formatted HTML directly in T
 ### Features
 
 - Renders conversations as styled HTML with embedded images, thinking blocks, and interactive controls
+- Thumbnail previews in Total Commander's thumbnail view — embedded images are used when available; for text-only files, a configurable fallback strategy generates a visual thumbnail
 - In-page text search via Total Commander's search dialog
 - Keyboard transparency — unmodified keys (Esc, N, P, and other TC hotkeys) pass through to Total Commander even when the viewer has focus; modifier combinations (Ctrl+C, Ctrl+A, Ctrl+scroll zoom) are handled by WebView2
 - Custom CSS override support (same selectors as the WCX HTML output)
@@ -257,6 +258,21 @@ All settings are optional. Defaults are used when a key is absent or the file do
 | `UserDataFolder`    | `%TEMP%\gemini_wlx`  | WebView2 browser profile storage location        |
 | `AllowContextMenu`  | `0`                  | Allow right-click context menu in the viewer     |
 | `AllowDevTools`     | `0`                  | Allow opening DevTools (F12) in the viewer       |
+
+##### [Thumbnails]
+
+| Key        | Default  | Description                                               |
+|------------|----------|-----------------------------------------------------------|
+| `Fallback` | `stripe` | Fallback thumbnail strategy for files without embedded images |
+
+When a Gemini file contains embedded images, the first image is decoded and scaled as the thumbnail. For files without images, the `Fallback` strategy determines what is shown:
+
+| Value      | Description                                                                  |
+|------------|------------------------------------------------------------------------------|
+| `stripe`   | Colored horizontal bars representing conversation structure — blue for user turns, green for model turns, heights proportional to message length. Fast binary scan, no JSON parsing. |
+| `text`     | White card showing the first user message as a text excerpt. Fast binary scan with early termination. |
+| `metadata` | Badge showing the model name, chunk count, and token count. Requires full JSON parsing (slowest, but still fast enough for background thumbnail generation). |
+| `none`     | No thumbnail for imageless files.                                            |
 
 ## Building from Source
 

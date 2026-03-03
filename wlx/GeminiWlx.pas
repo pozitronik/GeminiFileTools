@@ -35,6 +35,7 @@ type
 		UserDataFolder: string;
 		AllowContextMenu: Boolean;
 		AllowDevTools: Boolean;
+		ThumbnailFallback: string;
 	end;
 
 	/// <summary>
@@ -133,6 +134,7 @@ uses
 	System.AnsiStrings,
 	System.Math,
 	System.NetEncoding,
+	System.Generics.Collections,
 	Winapi.Wincodec,
 	GeminiFile.Formatter.Utils;
 
@@ -147,6 +149,13 @@ const
 	DEF_DefaultExpandThinking = False;
 	DEF_AllowContextMenu = False;
 	DEF_AllowDevTools = False;
+	DEF_ThumbnailFallback = 'stripe';
+
+	/// Thumbnail fallback strategy identifiers
+	THUMB_FALLBACK_NONE = 'none';
+	THUMB_FALLBACK_STRIPE = 'stripe';
+	THUMB_FALLBACK_TEXT = 'text';
+	THUMB_FALLBACK_METADATA = 'metadata';
 
 type
 	/// <summary>
@@ -154,6 +163,15 @@ type
 	///   exported by WebView2Loader.dll.
 	/// </summary>
 	TCreateCoreWebView2EnvironmentWithOptionsFunc = function(browserExecutableFolder: LPCWSTR; UserDataFolder: LPCWSTR; const environmentOptions: ICoreWebView2EnvironmentOptions; const environmentCreatedHandler: ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler): HResult; stdcall;
+
+	/// <summary>
+	///   Records a conversation role marker found during binary file scan.
+	///   Used by the stripe thumbnail strategy to visualize conversation structure.
+	/// </summary>
+	TRoleMarker = record
+		Role: Byte; // 0 = user, 1 = model
+		ByteOffset: Int64; // position in file
+	end;
 
 var
 	GClassRegistered: Boolean;
@@ -213,6 +231,7 @@ begin
 		GListerConfig.DefaultExpandThinking := DEF_DefaultExpandThinking;
 		GListerConfig.AllowContextMenu := DEF_AllowContextMenu;
 		GListerConfig.AllowDevTools := DEF_AllowDevTools;
+		GListerConfig.ThumbnailFallback := DEF_ThumbnailFallback;
 
 		LIniPath := TPath.Combine(GetPluginDir, 'gemini.ini');
 		if TFile.Exists(LIniPath) then
@@ -227,6 +246,7 @@ begin
 				GListerConfig.UserDataFolder := LIni.ReadString('WebView2', 'UserDataFolder', '');
 				GListerConfig.AllowContextMenu := LIni.ReadBool('WebView2', 'AllowContextMenu', DEF_AllowContextMenu);
 				GListerConfig.AllowDevTools := LIni.ReadBool('WebView2', 'AllowDevTools', DEF_AllowDevTools);
+				GListerConfig.ThumbnailFallback := LowerCase(LIni.ReadString('Thumbnails', 'Fallback', DEF_ThumbnailFallback));
 			finally
 				LIni.Free;
 			end;
@@ -1036,22 +1056,574 @@ begin
 	end;
 end;
 
+/// <summary>
+///   Creates a top-down 32bpp DIB section and a memory DC with the bitmap selected.
+///   Fills the entire bitmap with the specified background color.
+///   Caller must call DeleteDC(ADC) and owns the returned HBITMAP.
+/// </summary>
+function CreateThumbnailDIB(AWidth, AHeight: Integer; ABgColor: COLORREF; out ADC: HDC): HBITMAP;
+var
+	LBitmapInfo: TBitmapInfo;
+	LBits: Pointer;
+	LBrush: HBRUSH;
+	LRect: TRect;
+begin
+	ADC := 0;
+	FillChar(LBitmapInfo, SizeOf(LBitmapInfo), 0);
+	LBitmapInfo.bmiHeader.biSize := SizeOf(TBitmapInfoHeader);
+	LBitmapInfo.bmiHeader.biWidth := AWidth;
+	LBitmapInfo.bmiHeader.biHeight := -AHeight; // Top-down
+	LBitmapInfo.bmiHeader.biPlanes := 1;
+	LBitmapInfo.bmiHeader.biBitCount := 32;
+	LBitmapInfo.bmiHeader.biCompression := BI_RGB;
+
+	Result := CreateDIBSection(0, LBitmapInfo, DIB_RGB_COLORS, LBits, 0, 0);
+	if Result = 0 then
+		Exit;
+
+	ADC := CreateCompatibleDC(0);
+	SelectObject(ADC, Result);
+
+	// Fill background
+	LRect := Rect(0, 0, AWidth, AHeight);
+	LBrush := CreateSolidBrush(ABgColor);
+	FillRect(ADC, LRect, LBrush);
+	DeleteObject(LBrush);
+end;
+
+/// <summary>
+///   Binary scan for "role" markers in a Gemini file.
+///   For each marker, reads ahead past : and " to determine user vs model.
+///   Returns array of role markers with byte offsets. No JSON parsing.
+/// </summary>
+function ScanRoleMarkers(const AFileName: string): TArray<TRoleMarker>;
+var
+	LStream: TFileStream;
+	LBuf: TBytes;
+	LBytesRead, LOverlap, I: Integer;
+	LFilePos: Int64;
+	LMarker: RawByteString;
+	LByte: Byte;
+	LMarkerList: TList<TRoleMarker>;
+	LRoleMarker: TRoleMarker;
+begin
+	Result := nil;
+	LMarker := RawByteString('"role"');
+
+	LMarkerList := TList<TRoleMarker>.Create;
+	try
+		LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+		try
+			LOverlap := Length(LMarker) - 1;
+			SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
+			LFilePos := 0;
+
+			while LFilePos < LStream.Size do
+			begin
+				LStream.Position := LFilePos;
+				LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+				if LBytesRead = 0 then
+					Break;
+
+				for I := 0 to LBytesRead - Length(LMarker) do
+				begin
+					if CompareMem(@LBuf[I], @LMarker[1], Length(LMarker)) then
+					begin
+						// Found "role" -- read ahead past : and " to get first char of value
+						LStream.Position := LFilePos + I + Length(LMarker);
+
+						// Skip whitespace and colon to find opening quote
+						while LStream.Position < LStream.Size do
+						begin
+							LStream.ReadBuffer(LByte, 1);
+							if LByte = Ord('"') then
+								Break;
+						end;
+
+						// Read first character of the role value
+						if LStream.Position < LStream.Size then
+						begin
+							LStream.ReadBuffer(LByte, 1);
+							LRoleMarker.ByteOffset := LFilePos + I;
+							if LByte = Ord('u') then
+								LRoleMarker.Role := 0 // user
+							else if LByte = Ord('m') then
+								LRoleMarker.Role := 1 // model
+							else
+								Continue; // unknown role, skip
+							LMarkerList.Add(LRoleMarker);
+						end;
+					end;
+				end;
+
+				if LBytesRead < Length(LMarker) then
+					Break;
+
+				Inc(LFilePos, LBytesRead - LOverlap);
+			end;
+		finally
+			LStream.Free;
+		end;
+
+		Result := LMarkerList.ToArray;
+	finally
+		LMarkerList.Free;
+	end;
+end;
+
+/// <summary>
+///   Renders a stripe thumbnail showing conversation structure as horizontal bars.
+///   Each bar's height is proportional to the byte distance between consecutive role markers.
+///   User = warm blue, Model = muted green. 1px separator on light gray background.
+/// </summary>
+function RenderStripeThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+const
+	COLOR_USER = $00BB7733; // warm blue (BGR)
+	COLOR_MODEL = $0044AA55; // muted green (BGR)
+	COLOR_BG = $00F0F0F0; // light gray
+	COLOR_SEP = $00D0D0D0; // separator
+var
+	LMarkers: TArray<TRoleMarker>;
+	LDC: HDC;
+	LTotalBytes: Int64;
+	LBrush: HBRUSH;
+	LRect: TRect;
+	I, LY, LBarH: Integer;
+	LSegmentBytes: Int64;
+	LFileSize: Int64;
+	LStream: TFileStream;
+begin
+	Result := 0;
+	LMarkers := ScanRoleMarkers(AFileName);
+	if Length(LMarkers) = 0 then
+		Exit;
+
+	// Get file size for proportional calculations
+	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+	try
+		LFileSize := LStream.Size;
+	finally
+		LStream.Free;
+	end;
+
+	if LFileSize = 0 then
+		Exit;
+
+	// Total conversation span: from first marker to end of file
+	LTotalBytes := LFileSize - LMarkers[0].ByteOffset;
+	if LTotalBytes <= 0 then
+		Exit;
+
+	Result := CreateThumbnailDIB(AWidth, AHeight, COLOR_BG, LDC);
+	if Result = 0 then
+		Exit;
+
+	try
+		LY := 0;
+		for I := 0 to High(LMarkers) do
+		begin
+			// Segment size: distance to next marker, or to end of file for last marker
+			if I < High(LMarkers) then
+				LSegmentBytes := LMarkers[I + 1].ByteOffset - LMarkers[I].ByteOffset
+			else
+				LSegmentBytes := LFileSize - LMarkers[I].ByteOffset;
+
+			LBarH := Round((LSegmentBytes / LTotalBytes) * AHeight);
+			// Last segment fills remaining space to avoid rounding gaps
+			if I = High(LMarkers) then
+				LBarH := AHeight - LY;
+			if LBarH <= 0 then
+				LBarH := 1;
+
+			// Draw the colored bar
+			if LMarkers[I].Role = 0 then
+				LBrush := CreateSolidBrush(COLOR_USER)
+			else
+				LBrush := CreateSolidBrush(COLOR_MODEL);
+			LRect := Rect(0, LY, AWidth, LY + LBarH);
+			FillRect(LDC, LRect, LBrush);
+			DeleteObject(LBrush);
+
+			// 1px separator between bars (except after the last one)
+			if (I < High(LMarkers)) and (LBarH > 1) then
+			begin
+				LBrush := CreateSolidBrush(COLOR_SEP);
+				LRect := Rect(0, LY + LBarH - 1, AWidth, LY + LBarH);
+				FillRect(LDC, LRect, LBrush);
+				DeleteObject(LBrush);
+			end;
+
+			Inc(LY, LBarH);
+		end;
+	finally
+		DeleteDC(LDC);
+	end;
+end;
+
+/// <summary>
+///   Extracts the first user message text via binary scan.
+///   Finds first "role" with value starting with 'u', then searches backward
+///   for "text" (which precedes "role" in chunk objects), reads the JSON string value.
+///   Decodes JSON escapes and converts UTF-8 to string.
+/// </summary>
+function ExtractFirstUserText(const AFileName: string; AMaxChars: Integer = 200): string;
+var
+	LStream: TFileStream;
+	LBuf: TBytes;
+	LBytesRead, LOverlap, I, LPos: Integer;
+	LFilePos, LUserOffset: Int64;
+	LRoleMarker: RawByteString;
+	LTextKey: RawByteString;
+	LByte: Byte;
+	LFound: Boolean;
+	LTextBytes: TBytesStream;
+	LRawText: UTF8String;
+	LRESULT: string;
+	LBackslash: Byte;
+begin
+	Result := '';
+	LRoleMarker := RawByteString('"role"');
+	LTextKey := RawByteString('"text"');
+
+	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+	try
+		SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
+		LOverlap := Length(LRoleMarker) - 1;
+		LFilePos := 0;
+		LUserOffset := -1;
+
+		// Phase 1: find first "role" with value starting with 'u'
+		while LFilePos < LStream.Size do
+		begin
+			LStream.Position := LFilePos;
+			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+			if LBytesRead = 0 then
+				Break;
+
+			for I := 0 to LBytesRead - Length(LRoleMarker) do
+			begin
+				if CompareMem(@LBuf[I], @LRoleMarker[1], Length(LRoleMarker)) then
+				begin
+					LStream.Position := LFilePos + I + Length(LRoleMarker);
+					// Skip past : and " to get first char
+					while LStream.Position < LStream.Size do
+					begin
+						LStream.ReadBuffer(LByte, 1);
+						if LByte = Ord('"') then
+							Break;
+					end;
+					if LStream.Position < LStream.Size then
+					begin
+						LStream.ReadBuffer(LByte, 1);
+						if LByte = Ord('u') then
+						begin
+							LUserOffset := LFilePos + I;
+							Break;
+						end;
+					end;
+				end;
+			end;
+
+			if LUserOffset >= 0 then
+				Break;
+
+			if LBytesRead < Length(LRoleMarker) then
+				Break;
+
+			Inc(LFilePos, LBytesRead - LOverlap);
+		end;
+
+		if LUserOffset < 0 then
+			Exit;
+
+		// Phase 2: search backward from user "role" offset for "text" key
+		// Search in the region before the role marker (up to 4KB back)
+		LFilePos := Max(0, LUserOffset - 4096);
+		LStream.Position := LFilePos;
+		LBytesRead := LStream.Read(LBuf[0], Min(THUMB_SEARCH_BUF_SIZE, LUserOffset - LFilePos));
+		if LBytesRead = 0 then
+			Exit;
+
+		// Find last occurrence of "text" before the role marker
+		LFound := False;
+		LPos := -1;
+		for I := LBytesRead - Length(LTextKey) downto 0 do
+		begin
+			if CompareMem(@LBuf[I], @LTextKey[1], Length(LTextKey)) then
+			begin
+				LPos := I;
+				LFound := True;
+				Break;
+			end;
+		end;
+
+		if not LFound then
+			Exit;
+
+		// Phase 3: skip past "text" : " to get to the value
+		LStream.Position := LFilePos + LPos + Length(LTextKey);
+		while LStream.Position < LStream.Size do
+		begin
+			LStream.ReadBuffer(LByte, 1);
+			if LByte = Ord('"') then
+				Break;
+		end;
+
+		// Phase 4: read JSON string value until closing unescaped quote
+		LTextBytes := TBytesStream.Create;
+		try
+			while LStream.Position < LStream.Size do
+			begin
+				LStream.ReadBuffer(LByte, 1);
+				if LByte = Ord('"') then
+					Break;
+				if LByte = Ord('\') then
+				begin
+					// Escaped character
+					if LStream.Position >= LStream.Size then
+						Break;
+					LStream.ReadBuffer(LByte, 1);
+					case Chr(LByte) of
+						'n':
+							LByte := Ord(#10);
+						't':
+							LByte := Ord(#9);
+						'\':
+							; // LByte already holds backslash
+						'"':
+							; // LByte already holds quote
+						'/':
+							; // LByte already holds slash
+						else
+							// Unknown escape -- write backslash then the escaped char
+							LBackslash := Ord('\');
+							LTextBytes.WriteBuffer(LBackslash, 1);
+					end;
+				end;
+				LTextBytes.WriteBuffer(LByte, 1);
+				// Early termination: enough bytes for MaxChars (UTF-8 can be multi-byte)
+				if LTextBytes.Size > AMaxChars * 4 then
+					Break;
+			end;
+
+			if LTextBytes.Size = 0 then
+				Exit;
+
+			// Convert UTF-8 bytes to string
+			SetLength(LRawText, LTextBytes.Size);
+			Move(LTextBytes.Bytes[0], LRawText[1], LTextBytes.Size);
+			LRESULT := UTF8ToString(LRawText);
+
+			// Truncate to MaxChars
+			if Length(LRESULT) > AMaxChars then
+				LRESULT := Copy(LRESULT, 1, AMaxChars);
+
+			Result := LRESULT;
+		finally
+			LTextBytes.Free;
+		end;
+	finally
+		LStream.Free;
+	end;
+end;
+
+/// <summary>
+///   Renders a text excerpt thumbnail as a white card with a "User:" label
+///   and the first user message text below it.
+/// </summary>
+function RenderTextExcerptThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+const
+	COLOR_BG = $00FFFFFF; // white
+	COLOR_BORDER = $00C0C0C0; // light gray border
+	COLOR_LABEL = $00888888; // gray label
+	COLOR_TEXT = $00222222; // near-black text
+var
+	LText: string;
+	LDC: HDC;
+	LFont, LOldFont: HFONT;
+	LPadding, LFontSize, LLabelH: Integer;
+	LRect: TRect;
+	LBrush, LPen: HGDIOBJ;
+begin
+	Result := 0;
+	LText := ExtractFirstUserText(AFileName);
+	if LText = '' then
+		Exit;
+
+	Result := CreateThumbnailDIB(AWidth, AHeight, COLOR_BG, LDC);
+	if Result = 0 then
+		Exit;
+
+	try
+		// Draw border
+		LBrush := GetStockObject(NULL_BRUSH);
+		SelectObject(LDC, LBrush);
+		LPen := CreatePen(PS_SOLID, 1, COLOR_BORDER);
+		SelectObject(LDC, LPen);
+		Rectangle(LDC, 0, 0, AWidth, AHeight);
+		DeleteObject(LPen);
+
+		LPadding := AWidth div 16;
+		if LPadding < 4 then
+			LPadding := 4;
+		LFontSize := AHeight div 12;
+		if LFontSize < 10 then
+			LFontSize := 10;
+
+		SetBkMode(LDC, TRANSPARENT);
+
+		// Draw "User:" label
+		LFont := CreateFont(-LFontSize, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH or FF_SWISS, 'Segoe UI');
+		LOldFont := SelectObject(LDC, LFont);
+		SetTextColor(LDC, COLOR_LABEL);
+		LRect := Rect(LPadding, LPadding, AWidth - LPadding, LPadding + LFontSize + 4);
+		DrawTextW(LDC, 'User:', 5, LRect, DT_LEFT or DT_SINGLELINE or DT_NOPREFIX);
+		LLabelH := LRect.Bottom - LRect.Top;
+		SelectObject(LDC, LOldFont);
+		DeleteObject(LFont);
+
+		// Draw excerpt text
+		LFont := CreateFont(-LFontSize, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH or FF_SWISS, 'Segoe UI');
+		LOldFont := SelectObject(LDC, LFont);
+		SetTextColor(LDC, COLOR_TEXT);
+		LRect := Rect(LPadding, LPadding + LLabelH + 2, AWidth - LPadding, AHeight - LPadding);
+		DrawTextW(LDC, PChar(LText), Length(LText), LRect, DT_LEFT or DT_WORDBREAK or DT_END_ELLIPSIS or DT_NOPREFIX);
+		SelectObject(LDC, LOldFont);
+		DeleteObject(LFont);
+	finally
+		DeleteDC(LDC);
+	end;
+end;
+
+/// <summary>
+///   Renders a metadata badge thumbnail with model name and conversation statistics.
+///   Uses full JSON parsing via TGeminiFile. Slowest strategy but shows rich info.
+/// </summary>
+function RenderMetadataThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+const
+	COLOR_BG = $00F8F8F8; // off-white
+	COLOR_ACCENT = $00CC6600; // blue accent bar (BGR)
+	COLOR_MODEL = $00333333; // dark text for model name
+	COLOR_STATS = $00666666; // medium gray for stats
+var
+	LGeminiFile: TGeminiFile;
+	LModelName, LChunkStr, LTokenStr: string;
+	LTotalTokens, I: Integer;
+	LDC: HDC;
+	LFont, LOldFont: HFONT;
+	LFontSize, LPadding, LAccentH, LY: Integer;
+	LRect: TRect;
+	LBrush: HBRUSH;
+begin
+	Result := 0;
+
+	LGeminiFile := TGeminiFile.Create;
+	try
+		LGeminiFile.LoadFromFile(AFileName);
+
+		// Extract model name, strip "models/" prefix
+		LModelName := '';
+		if LGeminiFile.RunSettings <> nil then
+		begin
+			LModelName := LGeminiFile.RunSettings.Model;
+			if LModelName.StartsWith('models/') then
+				LModelName := Copy(LModelName, 8, MaxInt);
+		end;
+		if LModelName = '' then
+			LModelName := 'Unknown model';
+
+		// Count chunks and total tokens
+		LChunkStr := IntToStr(LGeminiFile.Chunks.Count) + ' chunks';
+
+		LTotalTokens := 0;
+		for I := 0 to LGeminiFile.Chunks.Count - 1 do
+			Inc(LTotalTokens, LGeminiFile.Chunks[I].TokenCount);
+		LTokenStr := FormatFloat('#,##0', LTotalTokens) + ' tokens';
+	finally
+		LGeminiFile.Free;
+	end;
+
+	Result := CreateThumbnailDIB(AWidth, AHeight, COLOR_BG, LDC);
+	if Result = 0 then
+		Exit;
+
+	try
+		LPadding := AWidth div 16;
+		if LPadding < 4 then
+			LPadding := 4;
+		LAccentH := 3;
+
+		// Blue accent bar at top
+		LBrush := CreateSolidBrush(COLOR_ACCENT);
+		LRect := Rect(0, 0, AWidth, LAccentH);
+		FillRect(LDC, LRect, LBrush);
+		DeleteObject(LBrush);
+
+		SetBkMode(LDC, TRANSPARENT);
+		LFontSize := AHeight div 10;
+		if LFontSize < 10 then
+			LFontSize := 10;
+
+		// Model name -- centered, bold, larger
+		LFont := CreateFont(-(LFontSize + 2), 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH or FF_SWISS, 'Segoe UI');
+		LOldFont := SelectObject(LDC, LFont);
+		SetTextColor(LDC, COLOR_MODEL);
+		LY := LAccentH + LPadding + (AHeight - LAccentH) div 4 - LFontSize;
+		LRect := Rect(LPadding, LY, AWidth - LPadding, LY + LFontSize + 6);
+		DrawTextW(LDC, PChar(LModelName), Length(LModelName), LRect, DT_CENTER or DT_SINGLELINE or DT_END_ELLIPSIS or DT_NOPREFIX);
+		SelectObject(LDC, LOldFont);
+		DeleteObject(LFont);
+
+		// Stats lines -- centered, normal, smaller
+		LFont := CreateFont(-LFontSize, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH or FF_SWISS, 'Segoe UI');
+		LOldFont := SelectObject(LDC, LFont);
+		SetTextColor(LDC, COLOR_STATS);
+
+		LY := LAccentH + (AHeight - LAccentH) div 2;
+		LRect := Rect(LPadding, LY, AWidth - LPadding, LY + LFontSize + 4);
+		DrawTextW(LDC, PChar(LChunkStr), Length(LChunkStr), LRect, DT_CENTER or DT_SINGLELINE or DT_NOPREFIX);
+
+		Inc(LY, LFontSize + 6);
+		LRect := Rect(LPadding, LY, AWidth - LPadding, LY + LFontSize + 4);
+		DrawTextW(LDC, PChar(LTokenStr), Length(LTokenStr), LRect, DT_CENTER or DT_SINGLELINE or DT_NOPREFIX);
+
+		SelectObject(LDC, LOldFont);
+		DeleteObject(LFont);
+	finally
+		DeleteDC(LDC);
+	end;
+end;
+
 function ListGetPreviewBitmapW(FileToLoad: PWideChar; width, height: Integer; contentbuf: PAnsiChar; contentbuflen: Integer): HBITMAP; stdcall;
 var
 	LBase64Bytes, LImageData: TBytes;
+	LFileName: string;
+	LFallback: string;
 begin
 	Result := 0;
 	try
 		EnsureComInitialized;
+		LFileName := string(FileToLoad);
 
-		if not FindFirstImageBase64(string(FileToLoad), LBase64Bytes) then
-			Exit;
+		// Primary path: embedded image thumbnail
+		if FindFirstImageBase64(LFileName, LBase64Bytes) then
+		begin
+			LImageData := TNetEncoding.Base64.Decode(LBase64Bytes);
+			if Length(LImageData) > 0 then
+				Result := ImageBytesToThumbnail(LImageData, width, height);
+			if Result <> 0 then
+				Exit;
+		end;
 
-		LImageData := TNetEncoding.Base64.Decode(LBase64Bytes);
-		if Length(LImageData) = 0 then
-			Exit;
-
-		Result := ImageBytesToThumbnail(LImageData, width, height);
+		// Fallback strategies for files without embedded images
+		LFallback := GetListerConfig.ThumbnailFallback;
+		if LFallback = THUMB_FALLBACK_STRIPE then
+			Result := RenderStripeThumbnail(LFileName, width, height)
+		else if LFallback = THUMB_FALLBACK_TEXT then
+			Result := RenderTextExcerptThumbnail(LFileName, width, height)
+		else if LFallback = THUMB_FALLBACK_METADATA then
+			Result := RenderMetadataThumbnail(LFileName, width, height);
+		// THUMB_FALLBACK_NONE or unknown: Result stays 0
 	except
 		Result := 0;
 	end;
