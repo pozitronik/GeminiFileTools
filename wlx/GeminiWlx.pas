@@ -100,8 +100,7 @@ type
 		FParentWin: HWND;
 	public
 		constructor Create(AParentWin: HWND);
-		function Invoke(const sender: ICoreWebView2Controller;
-			const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
+		function Invoke(const sender: ICoreWebView2Controller; const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
 	end;
 
 function GetListerConfig: TListerConfig;
@@ -118,6 +117,10 @@ function ListLoad(ParentWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): H
 function ListLoadNext(ParentWin: HWND; ListWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): Integer; stdcall;
 function ListSearchText(ListWin: HWND; SearchString: PAnsiChar; SearchParameter: Integer): Integer; stdcall;
 
+// Thumbnails
+function ListGetPreviewBitmapW(FileToLoad: PWideChar; width, height: Integer; contentbuf: PAnsiChar; contentbuflen: Integer): HBITMAP; stdcall;
+function ListGetPreviewBitmap(FileToLoad: PAnsiChar; width, height: Integer; contentbuf: PAnsiChar; contentbuflen: Integer): HBITMAP; stdcall;
+
 // Common
 procedure ListCloseWindow(ListWin: HWND); stdcall;
 procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
@@ -128,6 +131,9 @@ implementation
 
 uses
 	System.AnsiStrings,
+	System.Math,
+	System.NetEncoding,
+	Winapi.Wincodec,
 	GeminiFile.Formatter.Utils;
 
 const
@@ -159,9 +165,9 @@ var
 	GCreateEnvironment: TCreateCoreWebView2EnvironmentWithOptionsFunc;
 	GComInitialized: Boolean;
 
-/// <summary>
-///   Returns the directory containing the plugin DLL.
-/// </summary>
+	/// <summary>
+	///   Returns the directory containing the plugin DLL.
+	/// </summary>
 function GetPluginDir: string;
 var
 	LDllPath: array [0 .. MAX_PATH] of Char;
@@ -516,7 +522,8 @@ begin
 
 	if FWebViewReady then
 		NavigateToFile(FTempHtmlPath)
-	else begin
+	else
+	begin
 		FPendingNavigation := FTempHtmlPath;
 		ShowStatus('Initializing WebView2...');
 	end;
@@ -624,9 +631,9 @@ begin
 	end;
 
 	// Forward unmodified keys from WebView2 to TC parent window
-	var LToken: EventRegistrationToken;
-	createdController.add_AcceleratorKeyPressed(
-		TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
+	var
+		LToken: EventRegistrationToken;
+	createdController.add_AcceleratorKeyPressed(TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
 
 	// Size the WebView2 to fill the plugin window
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
@@ -655,8 +662,7 @@ begin
 	FParentWin := AParentWin;
 end;
 
-function TAcceleratorKeyPressedHandler.Invoke(const sender: ICoreWebView2Controller;
-	const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
+function TAcceleratorKeyPressedHandler.Invoke(const sender: ICoreWebView2Controller; const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
 var
 	LKind: COREWEBVIEW2_KEY_EVENT_KIND;
 	LKey: SYSUINT;
@@ -778,6 +784,277 @@ var
 begin
 	LWide := WideString(AnsiString(SearchString));
 	Result := ListSearchTextW(ListWin, PWideChar(LWide), SearchParameter);
+end;
+
+// ========================================================================
+// Exported functions -- Thumbnails
+// ========================================================================
+
+const
+	/// Buffer size for binary search through file content
+	THUMB_SEARCH_BUF_SIZE = 65536;
+
+	/// <summary>
+	///   Performs a fast binary search for the first embedded image in a Gemini file.
+	///   Locates the "inlineImage" marker, then extracts the base64 "data" field
+	///   without full JSON parsing for speed.
+	/// </summary>
+function FindFirstImageBase64(const AFileName: string; out ABase64: TBytes): Boolean;
+var
+	LStream: TFileStream;
+	LBuf: TBytes;
+	LBytesRead, LOverlap, LPos, I: Integer;
+	LFilePos: Int64;
+	LMarker: RawByteString;
+	LDataKey: RawByteString;
+	LFound: Boolean;
+	LByte: Byte;
+	LRESULT: TBytesStream;
+begin
+	Result := False;
+	LMarker := RawByteString('"inlineImage"');
+	LDataKey := RawByteString('"data"');
+
+	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+	try
+		LOverlap := Length(LMarker) - 1;
+		SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
+		LFilePos := 0;
+		LFound := False;
+
+		// Phase 1: find "inlineImage" marker using overlapping buffer reads
+		while LFilePos < LStream.Size do
+		begin
+			LStream.Position := LFilePos;
+			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+			if LBytesRead = 0 then
+				Break;
+
+			// Search for marker in current buffer
+			for I := 0 to LBytesRead - Length(LMarker) do
+			begin
+				if CompareMem(@LBuf[I], @LMarker[1], Length(LMarker)) then
+				begin
+					// Position stream right after the marker
+					LStream.Position := LFilePos + I + Length(LMarker);
+					LFound := True;
+					Break;
+				end;
+			end;
+
+			if LFound then
+				Break;
+
+			// Advance with overlap to catch markers spanning buffer boundaries
+			Inc(LFilePos, LBytesRead - LOverlap);
+		end;
+
+		if not LFound then
+			Exit;
+
+		// Phase 2: find "data" key after the marker (within the same inlineImage object)
+		LFilePos := LStream.Position;
+		LFound := False;
+
+		while LFilePos < LStream.Size do
+		begin
+			LStream.Position := LFilePos;
+			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+			if LBytesRead = 0 then
+				Break;
+
+			for I := 0 to LBytesRead - Length(LDataKey) do
+			begin
+				if CompareMem(@LBuf[I], @LDataKey[1], Length(LDataKey)) then
+				begin
+					LStream.Position := LFilePos + I + Length(LDataKey);
+					LFound := True;
+					Break;
+				end;
+			end;
+
+			if LFound then
+				Break;
+
+			Inc(LFilePos, LBytesRead - (Length(LDataKey) - 1));
+		end;
+
+		if not LFound then
+			Exit;
+
+		// Phase 3: skip past `:` and whitespace to the opening `"` of the value
+		while LStream.Position < LStream.Size do
+		begin
+			LStream.ReadBuffer(LByte, 1);
+			if LByte = Ord('"') then
+				Break;
+		end;
+
+		// Phase 4: read base64 content until closing `"`
+		LRESULT := TBytesStream.Create;
+		try
+			SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
+			while LStream.Position < LStream.Size do
+			begin
+				LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+				if LBytesRead = 0 then
+					Break;
+
+				LPos := -1;
+				for I := 0 to LBytesRead - 1 do
+				begin
+					if LBuf[I] = Ord('"') then
+					begin
+						LPos := I;
+						Break;
+					end;
+				end;
+
+				if LPos >= 0 then
+				begin
+					if LPos > 0 then
+						LRESULT.WriteBuffer(LBuf[0], LPos);
+					Break;
+				end
+				else
+					LRESULT.WriteBuffer(LBuf[0], LBytesRead);
+			end;
+
+			if LRESULT.Size > 0 then
+			begin
+				ABase64 := Copy(LRESULT.Bytes, 0, LRESULT.Size);
+				Result := True;
+			end;
+		finally
+			LRESULT.Free;
+		end;
+	finally
+		LStream.Free;
+	end;
+end;
+
+/// <summary>
+///   Decodes raw image bytes and creates a scaled HBITMAP thumbnail using WIC.
+///   Returns 0 on any failure. Caller owns the returned HBITMAP.
+/// </summary>
+function ImageBytesToThumbnail(const AImageData: TBytes; AMaxWidth, AMaxHeight: Integer): HBITMAP;
+var
+	LFactory: IWICImagingFactory;
+	LStream: TBytesStream;
+	LAdapter: TStreamAdapter;
+	LDecoder: IWICBitmapDecoder;
+	LFrame: IWICBitmapFrameDecode;
+	LScaler: IWICBitmapScaler;
+	LConverter: IWICFormatConverter;
+	LOrigW, LOrigH, LNewW, LNewH: UINT;
+	LScale: Double;
+	LBitmapInfo: TBitmapInfo;
+	LBits: Pointer;
+	LStride: UINT;
+	LHr: HResult;
+begin
+	Result := 0;
+
+	LHr := CoCreateInstance(CLSID_WICImagingFactory, nil, CLSCTX_INPROC_SERVER, IWICImagingFactory, LFactory);
+	if Failed(LHr) then
+		Exit;
+
+	LStream := TBytesStream.Create(AImageData);
+	try
+		LAdapter := TStreamAdapter.Create(LStream, soReference);
+
+		LHr := LFactory.CreateDecoderFromStream(LAdapter, GUID_NULL, WICDecodeMetadataCacheOnDemand, LDecoder);
+		if Failed(LHr) then
+			Exit;
+
+		LHr := LDecoder.GetFrame(0, LFrame);
+		if Failed(LHr) then
+			Exit;
+
+		LHr := LFrame.GetSize(LOrigW, LOrigH);
+		if Failed(LHr) or (LOrigW = 0) or (LOrigH = 0) then
+			Exit;
+
+		// Calculate scaled dimensions preserving aspect ratio
+		LScale := Min(AMaxWidth / LOrigW, AMaxHeight / LOrigH);
+		if LScale > 1.0 then
+			LScale := 1.0; // Don't upscale
+		LNewW := Round(LOrigW * LScale);
+		LNewH := Round(LOrigH * LScale);
+		if (LNewW = 0) or (LNewH = 0) then
+			Exit;
+
+		// Scale
+		LHr := LFactory.CreateBitmapScaler(LScaler);
+		if Failed(LHr) then
+			Exit;
+
+		LHr := LScaler.Initialize(LFrame, LNewW, LNewH, WICBitmapInterpolationModeFant);
+		if Failed(LHr) then
+			Exit;
+
+		// Convert to 32bpp BGRA for CreateDIBSection compatibility
+		LHr := LFactory.CreateFormatConverter(LConverter);
+		if Failed(LHr) then
+			Exit;
+
+		LHr := LConverter.Initialize(LScaler, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nil, 0.0, WICBitmapPaletteTypeCustom);
+		if Failed(LHr) then
+			Exit;
+
+		// Create top-down 32bpp DIB section
+		FillChar(LBitmapInfo, SizeOf(LBitmapInfo), 0);
+		LBitmapInfo.bmiHeader.biSize := SizeOf(TBitmapInfoHeader);
+		LBitmapInfo.bmiHeader.biWidth := LNewW;
+		LBitmapInfo.bmiHeader.biHeight := -Integer(LNewH); // Top-down
+		LBitmapInfo.bmiHeader.biPlanes := 1;
+		LBitmapInfo.bmiHeader.biBitCount := 32;
+		LBitmapInfo.bmiHeader.biCompression := BI_RGB;
+
+		Result := CreateDIBSection(0, LBitmapInfo, DIB_RGB_COLORS, LBits, 0, 0);
+		if Result = 0 then
+			Exit;
+
+		// Copy decoded pixels into the DIB
+		LStride := LNewW * 4;
+		LHr := LConverter.CopyPixels(nil, LStride, LStride * LNewH, LBits);
+		if Failed(LHr) then
+		begin
+			DeleteObject(Result);
+			Result := 0;
+		end;
+	finally
+		LStream.Free;
+	end;
+end;
+
+function ListGetPreviewBitmapW(FileToLoad: PWideChar; width, height: Integer; contentbuf: PAnsiChar; contentbuflen: Integer): HBITMAP; stdcall;
+var
+	LBase64Bytes, LImageData: TBytes;
+begin
+	Result := 0;
+	try
+		EnsureComInitialized;
+
+		if not FindFirstImageBase64(string(FileToLoad), LBase64Bytes) then
+			Exit;
+
+		LImageData := TNetEncoding.Base64.Decode(LBase64Bytes);
+		if Length(LImageData) = 0 then
+			Exit;
+
+		Result := ImageBytesToThumbnail(LImageData, width, height);
+	except
+		Result := 0;
+	end;
+end;
+
+function ListGetPreviewBitmap(FileToLoad: PAnsiChar; width, height: Integer; contentbuf: PAnsiChar; contentbuflen: Integer): HBITMAP; stdcall;
+var
+	LWide: WideString;
+begin
+	LWide := WideString(AnsiString(FileToLoad));
+	Result := ListGetPreviewBitmapW(PWideChar(LWide), width, height, contentbuf, contentbuflen);
 end;
 
 // ========================================================================

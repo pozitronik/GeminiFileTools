@@ -37,6 +37,9 @@ exports
 	ListLoad,
 	ListLoadNext,
 	ListSearchText,
+	// Thumbnails
+	ListGetPreviewBitmapW,
+	ListGetPreviewBitmap,
 	// Common
 	ListCloseWindow,
 	ListGetDetectString,
@@ -44,4 +47,5 @@ exports
 	ListSendCommand;
 
 begin
+
 end.
