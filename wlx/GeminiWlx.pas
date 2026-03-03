@@ -845,6 +845,10 @@ begin
 			if LFound then
 				Break;
 
+			// Not enough bytes left to contain the marker -- already checked via overlap
+			if LBytesRead < Length(LMarker) then
+				Break;
+
 			// Advance with overlap to catch markers spanning buffer boundaries
 			Inc(LFilePos, LBytesRead - LOverlap);
 		end;
@@ -874,6 +878,10 @@ begin
 			end;
 
 			if LFound then
+				Break;
+
+			// Not enough bytes left to contain the key -- already checked via overlap
+			if LBytesRead < Length(LDataKey) then
 				Break;
 
 			Inc(LFilePos, LBytesRead - (Length(LDataKey) - 1));
