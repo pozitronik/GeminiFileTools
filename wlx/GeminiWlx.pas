@@ -1,0 +1,784 @@
+/// <summary>
+///   WLX lister plugin implementation for Gemini conversation files.
+///   Renders Gemini conversations as HTML in an embedded WebView2 control.
+///   Implements both Unicode and ANSI variants of the WLX API.
+/// </summary>
+unit GeminiWlx;
+
+interface
+
+uses
+	Winapi.Windows,
+	Winapi.Messages,
+	Winapi.ActiveX,
+	Winapi.WebView2,
+	System.SysUtils,
+	System.Classes,
+	System.IOUtils,
+	System.IniFiles,
+	WlxApi,
+	GeminiFile.Types,
+	GeminiFile.Model,
+	GeminiFile.Parser,
+	GeminiFile.Extractor,
+	GeminiFile,
+	GeminiFile.Formatter.Intf,
+	GeminiFile.Formatter.Html;
+
+type
+	TListerConfig = record
+		HideEmptyBlocks: Boolean;
+		CombineBlocks: Boolean;
+		RenderMarkdown: Boolean;
+		DefaultFullWidth: Boolean;
+		DefaultExpandThinking: Boolean;
+		UserDataFolder: string;
+		AllowContextMenu: Boolean;
+		AllowDevTools: Boolean;
+	end;
+
+	/// <summary>
+	///   Per-window state for a single lister instance.
+	///   Pointer stored via SetWindowLongPtr(GWLP_USERDATA).
+	/// </summary>
+	TGeminiListerWindow = class
+	private
+		FParentWin: HWND;
+		FPluginWin: HWND;
+		FStatusLabel: HWND;
+		FEnvironment: ICoreWebView2Environment;
+		FController: ICoreWebView2Controller;
+		FWebView: ICoreWebView2;
+		FTempHtmlPath: string;
+		FFileName: string;
+		FWebViewReady: Boolean;
+		FPendingNavigation: string;
+		procedure CleanupTempFile;
+		function GenerateHtml(const AFileName: string): string;
+		procedure NavigateToFile(const AHtmlPath: string);
+		procedure ShowStatus(const AMessage: string);
+		procedure HideStatus;
+	public
+		constructor Create(AParentWin: HWND; APluginWin: HWND);
+		destructor Destroy; override;
+		procedure InitWebView2;
+		procedure LoadFile(const AFileName: string);
+		procedure ResizeWebView;
+		property PluginWin: HWND read FPluginWin;
+		property WebViewReady: Boolean read FWebViewReady;
+	end;
+
+	/// <summary>
+	///   COM callback for WebView2 environment creation completion.
+	/// </summary>
+	TEnvironmentCompletedHandler = class(TInterfacedObject, ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler)
+	private
+		FOwner: TGeminiListerWindow;
+	public
+		constructor Create(AOwner: TGeminiListerWindow);
+		function Invoke(errorCode: HResult; const createdEnvironment: ICoreWebView2Environment): HResult; stdcall;
+	end;
+
+	/// <summary>
+	///   COM callback for WebView2 controller creation completion.
+	/// </summary>
+	TControllerCompletedHandler = class(TInterfacedObject, ICoreWebView2CreateCoreWebView2ControllerCompletedHandler)
+	private
+		FOwner: TGeminiListerWindow;
+	public
+		constructor Create(AOwner: TGeminiListerWindow);
+		function Invoke(errorCode: HResult; const createdController: ICoreWebView2Controller): HResult; stdcall;
+	end;
+
+function GetListerConfig: TListerConfig;
+
+// --- Exported WLX functions ---
+
+// Unicode (primary)
+function ListLoadW(ParentWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): HWND; stdcall;
+function ListLoadNextW(ParentWin: HWND; ListWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): Integer; stdcall;
+function ListSearchTextW(ListWin: HWND; SearchString: PWideChar; SearchParameter: Integer): Integer; stdcall;
+
+// ANSI (compatibility)
+function ListLoad(ParentWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): HWND; stdcall;
+function ListLoadNext(ParentWin: HWND; ListWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): Integer; stdcall;
+function ListSearchText(ListWin: HWND; SearchString: PAnsiChar; SearchParameter: Integer): Integer; stdcall;
+
+// Common
+procedure ListCloseWindow(ListWin: HWND); stdcall;
+procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
+procedure ListSetDefaultParams(dps: PListDefaultParamStruct); stdcall;
+function ListSendCommand(ListWin: HWND; Command, Parameter: Integer): Integer; stdcall;
+
+implementation
+
+uses
+	System.AnsiStrings,
+	GeminiFile.Formatter.Utils;
+
+const
+	GEMINI_LISTER_CLASS = 'GeminiListerClass';
+
+	/// Default plugin configuration values
+	DEF_HideEmptyBlocks = True;
+	DEF_CombineBlocks = False;
+	DEF_RenderMarkdown = True;
+	DEF_DefaultFullWidth = False;
+	DEF_DefaultExpandThinking = False;
+	DEF_AllowContextMenu = False;
+	DEF_AllowDevTools = False;
+
+type
+	/// <summary>
+	///   Function signature for CreateCoreWebView2EnvironmentWithOptions
+	///   exported by WebView2Loader.dll.
+	/// </summary>
+	TCreateCoreWebView2EnvironmentWithOptionsFunc = function(browserExecutableFolder: LPCWSTR; UserDataFolder: LPCWSTR; const environmentOptions: ICoreWebView2EnvironmentOptions; const environmentCreatedHandler: ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler): HResult; stdcall;
+
+var
+	GClassRegistered: Boolean;
+	GCustomCSS: string;
+	GCustomCSSLoaded: Boolean;
+	GListerConfig: TListerConfig;
+	GListerConfigLoaded: Boolean;
+	GLoaderHandle: HMODULE;
+	GCreateEnvironment: TCreateCoreWebView2EnvironmentWithOptionsFunc;
+	GComInitialized: Boolean;
+
+	/// <summary>
+	///   Returns the directory containing the plugin DLL.
+	/// </summary>
+function GetPluginDir: string;
+var
+	LDllPath: array [0 .. MAX_PATH] of Char;
+begin
+	if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
+		Result := TPath.GetDirectoryName(LDllPath)
+	else
+		Result := '';
+end;
+
+/// <summary>
+///   Returns custom CSS content from gemini.css located next to the plugin DLL.
+///   Caches the result on first call; returns empty string if file not found.
+/// </summary>
+function GetCustomCSS: string;
+var
+	LCssPath: string;
+begin
+	if not GCustomCSSLoaded then
+	begin
+		GCustomCSSLoaded := True;
+		GCustomCSS := '';
+		LCssPath := TPath.Combine(GetPluginDir, 'gemini.css');
+		if TFile.Exists(LCssPath) then
+			GCustomCSS := TFile.ReadAllText(LCssPath, TEncoding.UTF8);
+	end;
+	Result := GCustomCSS;
+end;
+
+function GetListerConfig: TListerConfig;
+var
+	LIniPath: string;
+	LIni: TIniFile;
+begin
+	if not GListerConfigLoaded then
+	begin
+		GListerConfigLoaded := True;
+		GListerConfig := Default (TListerConfig);
+		GListerConfig.HideEmptyBlocks := DEF_HideEmptyBlocks;
+		GListerConfig.CombineBlocks := DEF_CombineBlocks;
+		GListerConfig.RenderMarkdown := DEF_RenderMarkdown;
+		GListerConfig.DefaultFullWidth := DEF_DefaultFullWidth;
+		GListerConfig.DefaultExpandThinking := DEF_DefaultExpandThinking;
+		GListerConfig.AllowContextMenu := DEF_AllowContextMenu;
+		GListerConfig.AllowDevTools := DEF_AllowDevTools;
+
+		LIniPath := TPath.Combine(GetPluginDir, 'gemini.ini');
+		if TFile.Exists(LIniPath) then
+		begin
+			LIni := TIniFile.Create(LIniPath);
+			try
+				GListerConfig.HideEmptyBlocks := LIni.ReadBool('General', 'HideEmptyBlocks', DEF_HideEmptyBlocks);
+				GListerConfig.CombineBlocks := LIni.ReadBool('General', 'CombineBlocks', DEF_CombineBlocks);
+				GListerConfig.RenderMarkdown := LIni.ReadBool('General', 'RenderMarkdown', DEF_RenderMarkdown);
+				GListerConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', DEF_DefaultFullWidth);
+				GListerConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', DEF_DefaultExpandThinking);
+				GListerConfig.UserDataFolder := LIni.ReadString('WebView2', 'UserDataFolder', '');
+				GListerConfig.AllowContextMenu := LIni.ReadBool('WebView2', 'AllowContextMenu', DEF_AllowContextMenu);
+				GListerConfig.AllowDevTools := LIni.ReadBool('WebView2', 'AllowDevTools', DEF_AllowDevTools);
+			finally
+				LIni.Free;
+			end;
+		end;
+	end;
+	Result := GListerConfig;
+end;
+
+/// <summary>
+///   Returns the WebView2 user data folder path.
+///   Uses config value if set, otherwise %TEMP%\gemini_wlx.
+/// </summary>
+function GetUserDataFolder: string;
+var
+	LConfig: TListerConfig;
+begin
+	LConfig := GetListerConfig;
+	if LConfig.UserDataFolder <> '' then
+		Result := LConfig.UserDataFolder
+	else
+		Result := TPath.Combine(TPath.GetTempPath, 'gemini_wlx');
+end;
+
+/// <summary>
+///   Ensures COM is initialized for WebView2. Safe to call multiple times.
+/// </summary>
+procedure EnsureComInitialized;
+var
+	LHr: HResult;
+begin
+	if GComInitialized then
+		Exit;
+	LHr := OleInitialize(nil);
+	// S_OK = initialized, S_FALSE = already initialized -- both are fine
+	GComInitialized := Succeeded(LHr);
+end;
+
+/// <summary>
+///   Dynamically loads WebView2Loader.dll from the architecture-specific
+///   subfolder next to the plugin DLL, or from the plugin directory itself.
+/// </summary>
+function EnsureWebView2Loaded: Boolean;
+var
+	LSubDir, LLoaderPath: string;
+begin
+	if GLoaderHandle <> 0 then
+		Exit(True);
+
+{$IFDEF WIN64}
+	LSubDir := 'webview2x64';
+{$ELSE}
+	LSubDir := 'webview2x32';
+{$ENDIF}
+	LLoaderPath := TPath.Combine(TPath.Combine(GetPluginDir, LSubDir), 'WebView2Loader.dll');
+	if not TFile.Exists(LLoaderPath) then
+	begin
+		// Fallback: try the plugin directory itself
+		LLoaderPath := TPath.Combine(GetPluginDir, 'WebView2Loader.dll');
+		if not TFile.Exists(LLoaderPath) then
+			Exit(False);
+	end;
+
+	GLoaderHandle := LoadLibrary(PChar(LLoaderPath));
+	if GLoaderHandle = 0 then
+		Exit(False);
+
+	GCreateEnvironment := GetProcAddress(GLoaderHandle, 'CreateCoreWebView2EnvironmentWithOptions');
+	if not Assigned(GCreateEnvironment) then
+	begin
+		FreeLibrary(GLoaderHandle);
+		GLoaderHandle := 0;
+		Exit(False);
+	end;
+
+	Result := True;
+end;
+
+// ========================================================================
+// Window procedure
+// ========================================================================
+
+function ListerWndProc(Wnd: HWND; Msg: UINT; wParam: wParam; lParam: lParam): LRESULT; stdcall;
+var
+	LWindow: TGeminiListerWindow;
+begin
+	LWindow := TGeminiListerWindow(GetWindowLongPtr(Wnd, GWLP_USERDATA));
+
+	case Msg of
+		WM_SIZE:
+			begin
+				if (LWindow <> nil) then
+					LWindow.ResizeWebView;
+				Result := 0;
+			end;
+		WM_SETFOCUS:
+			begin
+				if (LWindow <> nil) and (LWindow.FController <> nil) then
+					LWindow.FController.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+				Result := 0;
+			end;
+		else
+			Result := DefWindowProc(Wnd, Msg, wParam, lParam);
+	end;
+end;
+
+procedure RegisterListerClass;
+var
+	LWndClass: TWndClass;
+begin
+	if GClassRegistered then
+		Exit;
+
+	FillChar(LWndClass, SizeOf(LWndClass), 0);
+	LWndClass.lpfnWndProc := @ListerWndProc;
+	LWndClass.HInstance := HInstance;
+	LWndClass.lpszClassName := GEMINI_LISTER_CLASS;
+	LWndClass.hCursor := LoadCursor(0, IDC_ARROW);
+	LWndClass.hbrBackground := COLOR_WINDOW + 1;
+
+	if Winapi.Windows.RegisterClass(LWndClass) <> 0 then
+		GClassRegistered := True;
+end;
+
+// ========================================================================
+// TGeminiListerWindow
+// ========================================================================
+
+constructor TGeminiListerWindow.Create(AParentWin: HWND; APluginWin: HWND);
+begin
+	inherited Create;
+	FParentWin := AParentWin;
+	FPluginWin := APluginWin;
+	FWebViewReady := False;
+
+	// Create a status label for loading/error messages
+	FStatusLabel := CreateWindowEx(0, 'STATIC', 'Loading...', WS_CHILD or WS_VISIBLE or SS_CENTER or SS_CENTERIMAGE, 0, 0, 1, 1, FPluginWin, 0, HInstance, nil);
+end;
+
+destructor TGeminiListerWindow.Destroy;
+begin
+	if FController <> nil then
+		FController.Close;
+	FController := nil;
+	FWebView := nil;
+	FEnvironment := nil;
+	CleanupTempFile;
+	inherited;
+end;
+
+procedure TGeminiListerWindow.ShowStatus(const AMessage: string);
+var
+	LRect: TRect;
+begin
+	if FStatusLabel <> 0 then
+	begin
+		GetClientRect(FPluginWin, LRect);
+		SetWindowPos(FStatusLabel, 0, 0, 0, LRect.Right, LRect.Bottom, SWP_NOZORDER);
+		SetWindowText(FStatusLabel, PChar(AMessage));
+		ShowWindow(FStatusLabel, SW_SHOW);
+	end;
+end;
+
+procedure TGeminiListerWindow.HideStatus;
+begin
+	if FStatusLabel <> 0 then
+		ShowWindow(FStatusLabel, SW_HIDE);
+end;
+
+procedure TGeminiListerWindow.CleanupTempFile;
+begin
+	if (FTempHtmlPath <> '') and TFile.Exists(FTempHtmlPath) then
+	begin
+		try
+			TFile.Delete(FTempHtmlPath);
+		except
+			// Ignore deletion failures (file may be locked by WebView2)
+		end;
+	end;
+	FTempHtmlPath := '';
+end;
+
+function TGeminiListerWindow.GenerateHtml(const AFileName: string): string;
+var
+	LGeminiFile: TGeminiFile;
+	LResources: TArray<TGeminiResource>;
+	LResourceInfos: TArray<TFormatterResourceInfo>;
+	LHtmlFmt: TGeminiHtmlFormatter;
+	LFmt: IGeminiFormatter;
+	LStream: TMemoryStream;
+	LConfig: TListerConfig;
+	LTempPath: string;
+	I, LPadWidth: Integer;
+begin
+	Result := '';
+	LConfig := GetListerConfig;
+
+	LGeminiFile := TGeminiFile.Create;
+	try
+		LGeminiFile.LoadFromFile(AFileName);
+
+		LResources := LGeminiFile.GetResources;
+
+		// Build resource infos with base64 data for embedded mode
+		SetLength(LResourceInfos, Length(LResources));
+		LPadWidth := ResourcePadWidth(Length(LResources));
+		for I := 0 to High(LResources) do
+		begin
+			LResourceInfos[I].FileName := Format('resources/resource_%.*d%s', [LPadWidth, I, LResources[I].GetFileExtension]);
+			LResourceInfos[I].MimeType := LResources[I].MimeType;
+			LResourceInfos[I].Base64Data := LResources[I].Base64Data;
+			LResourceInfos[I].DecodedSize := LResources[I].DecodedSize;
+			LResourceInfos[I].ChunkIndex := LResources[I].ChunkIndex;
+			LResourceInfos[I].IsThinking := False;
+			if LResources[I].ChunkIndex < LGeminiFile.Chunks.Count then
+				LResourceInfos[I].IsThinking := LGeminiFile.Chunks[LResources[I].ChunkIndex].IsThought;
+		end;
+
+		// Generate embedded HTML
+		LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
+		LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(AFileName);
+		LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocks;
+		LHtmlFmt.CombineBlocks := LConfig.CombineBlocks;
+		LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
+		LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
+		LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+		LFmt := LHtmlFmt;
+
+		LStream := TMemoryStream.Create;
+		try
+			LFmt.FormatToStream(LStream, LGeminiFile.Chunks, LGeminiFile.SystemInstruction, LGeminiFile.RunSettings, LResourceInfos);
+
+			// Write to temp file
+			LTempPath := TPath.Combine(TPath.GetTempPath, 'gemini_wlx_' + TPath.GetGUIDFileName + '.html');
+			LStream.Position := 0;
+			LStream.SaveToFile(LTempPath);
+			Result := LTempPath;
+		finally
+			LStream.Free;
+		end;
+	finally
+		LGeminiFile.Free;
+	end;
+end;
+
+procedure TGeminiListerWindow.NavigateToFile(const AHtmlPath: string);
+var
+	LUrl: string;
+begin
+	if (FWebView <> nil) and (AHtmlPath <> '') then
+	begin
+		LUrl := 'file:///' + StringReplace(AHtmlPath, '\', '/', [rfReplaceAll]);
+		FWebView.Navigate(PWideChar(LUrl));
+		HideStatus;
+	end;
+end;
+
+procedure TGeminiListerWindow.LoadFile(const AFileName: string);
+var
+	LNewTempPath: string;
+begin
+	FFileName := AFileName;
+
+	ShowStatus('Parsing ' + TPath.GetFileName(AFileName) + '...');
+
+	try
+		LNewTempPath := GenerateHtml(AFileName);
+	except
+		on E: Exception do
+		begin
+			ShowStatus('Error: ' + E.Message);
+			Exit;
+		end;
+	end;
+
+	if LNewTempPath = '' then
+	begin
+		ShowStatus('Error: failed to generate HTML');
+		Exit;
+	end;
+
+	// Cleanup previous temp file
+	CleanupTempFile;
+	FTempHtmlPath := LNewTempPath;
+
+	if FWebViewReady then
+		NavigateToFile(FTempHtmlPath)
+	else
+	begin
+		FPendingNavigation := FTempHtmlPath;
+		ShowStatus('Initializing WebView2...');
+	end;
+end;
+
+procedure TGeminiListerWindow.InitWebView2;
+var
+	LHandler: ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler;
+	LUserData: string;
+	LHr: HResult;
+begin
+	EnsureComInitialized;
+
+	if not EnsureWebView2Loaded then
+	begin
+		ShowStatus('Error: WebView2Loader.dll not found. Place it next to the plugin DLL.');
+		Exit;
+	end;
+
+	LUserData := GetUserDataFolder;
+	LHandler := TEnvironmentCompletedHandler.Create(Self);
+	LHr := GCreateEnvironment(nil, PWideChar(LUserData), nil, LHandler);
+	if Failed(LHr) then
+		ShowStatus('Error: WebView2 init failed (0x' + IntToHex(LHr, 8) + '). Is Edge WebView2 Runtime installed?');
+end;
+
+procedure TGeminiListerWindow.ResizeWebView;
+var
+	LRect: Winapi.WebView2.tagRECT;
+begin
+	if FController <> nil then
+	begin
+		GetClientRect(FPluginWin, Winapi.Windows.TRect(LRect));
+		FController.Set_Bounds(LRect);
+	end;
+end;
+
+// ========================================================================
+// TEnvironmentCompletedHandler
+// ========================================================================
+
+constructor TEnvironmentCompletedHandler.Create(AOwner: TGeminiListerWindow);
+begin
+	inherited Create;
+	FOwner := AOwner;
+end;
+
+function TEnvironmentCompletedHandler.Invoke(errorCode: HResult; const createdEnvironment: ICoreWebView2Environment): HResult; stdcall;
+var
+	LHandler: ICoreWebView2CreateCoreWebView2ControllerCompletedHandler;
+begin
+	if Failed(errorCode) or (createdEnvironment = nil) then
+	begin
+		FOwner.ShowStatus('Error: WebView2 environment creation failed (0x' + IntToHex(errorCode, 8) + ')');
+		Exit(errorCode);
+	end;
+
+	FOwner.FEnvironment := createdEnvironment;
+	LHandler := TControllerCompletedHandler.Create(FOwner);
+	Result := createdEnvironment.CreateCoreWebView2Controller(FOwner.FPluginWin, LHandler);
+	if Failed(Result) then
+		FOwner.ShowStatus('Error: WebView2 controller creation failed (0x' + IntToHex(Result, 8) + ')');
+end;
+
+// ========================================================================
+// TControllerCompletedHandler
+// ========================================================================
+
+constructor TControllerCompletedHandler.Create(AOwner: TGeminiListerWindow);
+begin
+	inherited Create;
+	FOwner := AOwner;
+end;
+
+function TControllerCompletedHandler.Invoke(errorCode: HResult; const createdController: ICoreWebView2Controller): HResult; stdcall;
+var
+	LSettings: ICoreWebView2Settings;
+	LConfig: TListerConfig;
+	LRect: Winapi.WebView2.tagRECT;
+begin
+	if Failed(errorCode) or (createdController = nil) then
+	begin
+		FOwner.ShowStatus('Error: WebView2 controller callback failed (0x' + IntToHex(errorCode, 8) + ')');
+		Exit(errorCode);
+	end;
+
+	FOwner.FController := createdController;
+	createdController.Get_CoreWebView2(FOwner.FWebView);
+
+	// Configure WebView2 settings
+	LConfig := GetListerConfig;
+	if Succeeded(FOwner.FWebView.Get_Settings(LSettings)) then
+	begin
+		if LConfig.AllowDevTools then
+			LSettings.Set_AreDevToolsEnabled(1)
+		else
+			LSettings.Set_AreDevToolsEnabled(0);
+		if LConfig.AllowContextMenu then
+			LSettings.Set_AreDefaultContextMenusEnabled(1)
+		else
+			LSettings.Set_AreDefaultContextMenusEnabled(0);
+		LSettings.Set_IsScriptEnabled(1);
+		LSettings.Set_IsZoomControlEnabled(1);
+		LSettings.Set_IsStatusBarEnabled(0);
+	end;
+
+	// Size the WebView2 to fill the plugin window
+	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
+	createdController.Set_Bounds(LRect);
+	createdController.Set_IsVisible(1);
+
+	FOwner.FWebViewReady := True;
+
+	// Navigate to pending content if file was loaded before WebView2 was ready
+	if FOwner.FPendingNavigation <> '' then
+	begin
+		FOwner.NavigateToFile(FOwner.FPendingNavigation);
+		FOwner.FPendingNavigation := '';
+	end;
+
+	Result := S_OK;
+end;
+
+// ========================================================================
+// Exported functions -- Unicode (primary)
+// ========================================================================
+
+function ListLoadW(ParentWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): HWND; stdcall;
+var
+	LWindow: TGeminiListerWindow;
+	LPluginWin: HWND;
+	LRect: TRect;
+begin
+	Result := 0;
+
+	RegisterListerClass;
+	if not GClassRegistered then
+		Exit;
+
+	GetClientRect(ParentWin, LRect);
+	LPluginWin := CreateWindowEx(0, GEMINI_LISTER_CLASS, nil, WS_CHILD or WS_VISIBLE, 0, 0, LRect.Right - LRect.Left, LRect.Bottom - LRect.Top, ParentWin, 0, HInstance, nil);
+	if LPluginWin = 0 then
+		Exit;
+
+	LWindow := TGeminiListerWindow.Create(ParentWin, LPluginWin);
+	SetWindowLongPtr(LPluginWin, GWLP_USERDATA, NativeInt(LWindow));
+
+	LWindow.LoadFile(string(FileToLoad));
+	LWindow.InitWebView2;
+
+	Result := LPluginWin;
+end;
+
+function ListLoadNextW(ParentWin: HWND; ListWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): Integer; stdcall;
+var
+	LWindow: TGeminiListerWindow;
+begin
+	Result := LISTPLUGIN_ERROR;
+	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
+	if LWindow = nil then
+		Exit;
+
+	try
+		LWindow.LoadFile(string(FileToLoad));
+		Result := LISTPLUGIN_OK;
+	except
+		Result := LISTPLUGIN_ERROR;
+	end;
+end;
+
+function ListSearchTextW(ListWin: HWND; SearchString: PWideChar; SearchParameter: Integer): Integer; stdcall;
+var
+	LWindow: TGeminiListerWindow;
+	LScript: string;
+	LCaseSensitive, LBackwards: Boolean;
+begin
+	Result := LISTPLUGIN_ERROR;
+	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
+	if (LWindow = nil) or (LWindow.FWebView = nil) then
+		Exit;
+
+	LCaseSensitive := (SearchParameter and lcs_matchcase) <> 0;
+	LBackwards := (SearchParameter and lcs_backwards) <> 0;
+
+	// Use window.find() for in-page search
+	LScript := Format('window.find("%s", %s, %s, false, false, false, false)', [StringReplace(StringReplace(string(SearchString), '\', '\\', [rfReplaceAll]), '"', '\"', [rfReplaceAll]), LowerCase(BoolToStr(LCaseSensitive, True)), LowerCase(BoolToStr(LBackwards, True))]);
+
+	LWindow.FWebView.ExecuteScript(PWideChar(LScript), nil);
+	Result := LISTPLUGIN_OK;
+end;
+
+// ========================================================================
+// Exported functions -- ANSI (compatibility)
+// ========================================================================
+
+function ListLoad(ParentWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): HWND; stdcall;
+var
+	LWide: WideString;
+begin
+	LWide := WideString(AnsiString(FileToLoad));
+	Result := ListLoadW(ParentWin, PWideChar(LWide), ShowFlags);
+end;
+
+function ListLoadNext(ParentWin: HWND; ListWin: HWND; FileToLoad: PAnsiChar; ShowFlags: Integer): Integer; stdcall;
+var
+	LWide: WideString;
+begin
+	LWide := WideString(AnsiString(FileToLoad));
+	Result := ListLoadNextW(ParentWin, ListWin, PWideChar(LWide), ShowFlags);
+end;
+
+function ListSearchText(ListWin: HWND; SearchString: PAnsiChar; SearchParameter: Integer): Integer; stdcall;
+var
+	LWide: WideString;
+begin
+	LWide := WideString(AnsiString(SearchString));
+	Result := ListSearchTextW(ListWin, PWideChar(LWide), SearchParameter);
+end;
+
+// ========================================================================
+// Exported functions -- Common
+// ========================================================================
+
+procedure ListCloseWindow(ListWin: HWND); stdcall;
+var
+	LWindow: TGeminiListerWindow;
+begin
+	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
+	SetWindowLongPtr(ListWin, GWLP_USERDATA, 0);
+	if LWindow <> nil then
+		LWindow.Free;
+	DestroyWindow(ListWin);
+end;
+
+procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
+const
+	DETECT = 'FINDI("chunkedPrompt")';
+begin
+	System.AnsiStrings.StrLCopy(DetectString, PAnsiChar(AnsiString(DETECT)), MaxLen - 1);
+end;
+
+procedure ListSetDefaultParams(dps: PListDefaultParamStruct); stdcall;
+begin
+	// We use our own gemini.ini next to the DLL, so nothing to store here
+end;
+
+function ListSendCommand(ListWin: HWND; Command, Parameter: Integer): Integer; stdcall;
+var
+	LWindow: TGeminiListerWindow;
+begin
+	Result := LISTPLUGIN_ERROR;
+	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
+	if (LWindow = nil) or (LWindow.FWebView = nil) then
+		Exit;
+
+	case Command of
+		lc_copy:
+			begin
+				LWindow.FWebView.ExecuteScript('document.execCommand("copy")', nil);
+				Result := LISTPLUGIN_OK;
+			end;
+		lc_selectall:
+			begin
+				LWindow.FWebView.ExecuteScript('document.execCommand("selectAll")', nil);
+				Result := LISTPLUGIN_OK;
+			end;
+		else
+			Result := LISTPLUGIN_ERROR;
+	end;
+end;
+
+initialization
+
+GClassRegistered := False;
+GLoaderHandle := 0;
+GCreateEnvironment := nil;
+GComInitialized := False;
+
+finalization
+
+if GLoaderHandle <> 0 then
+begin
+	FreeLibrary(GLoaderHandle);
+	GLoaderHandle := 0;
+end;
+
+end.

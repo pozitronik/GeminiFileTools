@@ -18,9 +18,14 @@
 *.~*
 *.wcx
 *.wcx64
+*.wlx
+*.wlx64
 /app/*.identcache
 /wcx_build.bat
+/wlx_build.bat
 /wcx/*.identcache
+/wlx/*.identcache
 /*.zip
 /release.bat
 /wcx/Win64/Release/gemini.ini
+/wlx/Win64/Release/gemini.ini
