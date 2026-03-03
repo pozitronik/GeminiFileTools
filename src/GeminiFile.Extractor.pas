@@ -10,7 +10,7 @@ interface
 uses
 	System.SysUtils,
 	System.IOUtils,
-	{$IFNDEF WCX_PLUGIN}
+	{$IF NOT (DEFINED(WCX_PLUGIN) OR DEFINED(WLX_PLUGIN))}
 	System.Threading,
 	{$ENDIF}
 	System.Generics.Collections,
@@ -80,7 +80,7 @@ begin
 	ForceDirectories(LAbsDir);
 	LPadWidth := ResourcePadWidth(Result);
 
-	{$IFNDEF WCX_PLUGIN}
+	{$IF NOT (DEFINED(WCX_PLUGIN) OR DEFINED(WLX_PLUGIN))}
 	if AThreaded and (Result > 1) then
 	begin
 		TParallel.&For(0, Result - 1,
