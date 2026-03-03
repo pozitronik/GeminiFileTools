@@ -1101,8 +1101,9 @@ end;
 ///   Binary scan for "role" markers in a Gemini file.
 ///   For each marker, reads ahead past : and " to determine user vs model.
 ///   Returns array of role markers with byte offsets. No JSON parsing.
+///   Also returns the file size to avoid a redundant file open by the caller.
 /// </summary>
-function ScanRoleMarkers(const AFileName: string): TArray<TRoleMarker>;
+function ScanRoleMarkers(const AFileName: string; out AFileSize: Int64): TArray<TRoleMarker>;
 var
 	LStream: TFileStream;
 	LBuf: TBytes;
@@ -1114,12 +1115,14 @@ var
 	LRoleMarker: TRoleMarker;
 begin
 	Result := nil;
+	AFileSize := 0;
 	LMarker := RawByteString('"role"');
 
 	LMarkerList := TList<TRoleMarker>.Create;
 	try
 		LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
 		try
+			AFileSize := LStream.Size;
 			LOverlap := Length(LMarker) - 1;
 			SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
 			LFilePos := 0;
@@ -1197,22 +1200,10 @@ var
 	I, LY, LBarH: Integer;
 	LSegmentBytes: Int64;
 	LFileSize: Int64;
-	LStream: TFileStream;
 begin
 	Result := 0;
-	LMarkers := ScanRoleMarkers(AFileName);
-	if Length(LMarkers) = 0 then
-		Exit;
-
-	// Get file size for proportional calculations
-	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
-	try
-		LFileSize := LStream.Size;
-	finally
-		LStream.Free;
-	end;
-
-	if LFileSize = 0 then
+	LMarkers := ScanRoleMarkers(AFileName, LFileSize);
+	if (Length(LMarkers) = 0) or (LFileSize = 0) then
 		Exit;
 
 	// Total conversation span: from first marker to end of file
