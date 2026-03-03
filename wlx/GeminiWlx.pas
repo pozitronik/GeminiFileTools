@@ -149,7 +149,7 @@ const
 	DEF_DefaultExpandThinking = False;
 	DEF_AllowContextMenu = False;
 	DEF_AllowDevTools = False;
-	DEF_ThumbnailFallback = 'stripe';
+	DEF_ThumbnailFallback = 'text';
 
 	/// Thumbnail fallback strategy identifiers
 	THUMB_FALLBACK_NONE = 'none';

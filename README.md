@@ -261,17 +261,17 @@ All settings are optional. Defaults are used when a key is absent or the file do
 
 ##### [Thumbnails]
 
-| Key        | Default  | Description                                               |
-|------------|----------|-----------------------------------------------------------|
-| `Fallback` | `stripe` | Fallback thumbnail strategy for files without embedded images |
+| Key        | Default | Description                                               |
+|------------|---------|-----------------------------------------------------------|
+| `Fallback` | `text`  | Fallback thumbnail strategy for files without embedded images |
 
 When a Gemini file contains embedded images, the first image is decoded and scaled as the thumbnail. For files without images, the `Fallback` strategy determines what is shown:
 
 | Value      | Description                                                                  |
 |------------|------------------------------------------------------------------------------|
-| `stripe`   | Colored horizontal bars representing conversation structure — blue for user turns, green for model turns, heights proportional to message length. Fast binary scan, no JSON parsing. |
 | `text`     | White card showing the first user message as a text excerpt. Fast binary scan with early termination. |
-| `metadata` | Badge showing the model name, chunk count, and token count. Requires full JSON parsing (slowest, but still fast enough for background thumbnail generation). |
+| `stripe`   | Colored horizontal bars representing conversation structure — blue for user turns, green for model turns, heights proportional to message length. Fast binary scan, no JSON parsing. |
+| `metadata` | Badge showing the model name, chunk count, and token count.                  |
 | `none`     | No thumbnail for imageless files.                                            |
 
 ## Building from Source
