@@ -133,6 +133,7 @@ implementation
 uses
 	System.AnsiStrings,
 	System.Math,
+	System.Types,
 	System.NetEncoding,
 	System.Generics.Collections,
 	Winapi.Wincodec,
@@ -1522,8 +1523,6 @@ var
 	LRect: TRect;
 	LBrush: HBRUSH;
 begin
-	Result := 0;
-
 	LGeminiFile := TGeminiFile.Create;
 	try
 		LGeminiFile.LoadFromFile(AFileName);
