@@ -105,7 +105,6 @@ type
 	end;
 
 function GetListerConfig: TListerConfig;
-procedure DebugLog(const ACategory, AMessage: string);
 
 // --- Exported WLX functions ---
 
@@ -159,31 +158,6 @@ var
 	GLoaderHandle: HMODULE;
 	GCreateEnvironment: TCreateCoreWebView2EnvironmentWithOptionsFunc;
 	GComInitialized: Boolean;
-	GDebugLogPath: string;
-
-	/// <summary>
-	///   Appends a timestamped line to the debug log file next to the DLL.
-	/// </summary>
-procedure DebugLog(const ACategory, AMessage: string);
-var
-	LFile: TextFile;
-	LStamp: string;
-begin
-	if GDebugLogPath = '' then
-		Exit;
-	try
-		LStamp := FormatDateTime('hh:nn:ss.zzz', Now);
-		AssignFile(LFile, GDebugLogPath);
-		if FileExists(GDebugLogPath) then
-			Append(LFile)
-		else
-			Rewrite(LFile);
-		WriteLn(LFile, LStamp + ' [' + ACategory + '] ' + AMessage);
-		CloseFile(LFile);
-	except
-		// Logging must never crash the host process
-	end;
-end;
 
 /// <summary>
 ///   Returns the directory containing the plugin DLL.
@@ -282,7 +256,6 @@ begin
 	LHr := OleInitialize(nil);
 	// S_OK = initialized, S_FALSE = already initialized -- both are fine
 	GComInitialized := Succeeded(LHr);
-	DebugLog('COM', 'OleInitialize result=0x' + IntToHex(LHr, 8) + ' success=' + BoolToStr(GComInitialized, True));
 end;
 
 /// <summary>
@@ -303,7 +276,6 @@ begin
 {$ENDIF}
 	// Try architecture-specific subfolder first
 	LLoaderPath := TPath.Combine(TPath.Combine(GetPluginDir, LSubDir), 'WebView2Loader.dll');
-	DebugLog('WebView2', 'Trying subfolder: ' + LLoaderPath);
 	if TFile.Exists(LLoaderPath) then
 		GLoaderHandle := LoadLibrary(PChar(LLoaderPath));
 
@@ -311,36 +283,25 @@ begin
 	if GLoaderHandle = 0 then
 	begin
 		LLoaderPath := TPath.Combine(GetPluginDir, 'WebView2Loader.dll');
-		DebugLog('WebView2', 'Trying plugin dir: ' + LLoaderPath);
 		if TFile.Exists(LLoaderPath) then
 			GLoaderHandle := LoadLibrary(PChar(LLoaderPath));
 	end;
 
 	// Fallback: standard Windows DLL search path (system-installed)
 	if GLoaderHandle = 0 then
-	begin
-		DebugLog('WebView2', 'Trying system search path');
 		GLoaderHandle := LoadLibrary('WebView2Loader.dll');
-	end;
 
 	if GLoaderHandle = 0 then
-	begin
-		DebugLog('WebView2', 'FAILED: WebView2Loader.dll not found anywhere, LastError=' + IntToStr(GetLastError));
 		Exit(False);
-	end;
-
-	DebugLog('WebView2', 'Loaded WebView2Loader.dll, handle=0x' + IntToHex(GLoaderHandle, 8));
 
 	GCreateEnvironment := GetProcAddress(GLoaderHandle, 'CreateCoreWebView2EnvironmentWithOptions');
 	if not Assigned(GCreateEnvironment) then
 	begin
-		DebugLog('WebView2', 'FAILED: GetProcAddress for CreateCoreWebView2EnvironmentWithOptions');
 		FreeLibrary(GLoaderHandle);
 		GLoaderHandle := 0;
 		Exit(False);
 	end;
 
-	DebugLog('WebView2', 'CreateCoreWebView2EnvironmentWithOptions resolved');
 	Result := True;
 end;
 
@@ -403,25 +364,18 @@ begin
 
 	// Create a status label for loading/error messages
 	FStatusLabel := CreateWindowEx(0, 'STATIC', 'Loading...', WS_CHILD or WS_VISIBLE or SS_CENTER or SS_CENTERIMAGE, 0, 0, 1, 1, FPluginWin, 0, HInstance, nil);
-	DebugLog('Window', 'Created, parent=0x' + IntToHex(AParentWin, 8) + ' plugin=0x' + IntToHex(APluginWin, 8));
 end;
 
 destructor TGeminiListerWindow.Destroy;
 begin
-	DebugLog('Window', 'Destroy enter, plugin=0x' + IntToHex(FPluginWin, 8));
-
 	if FController <> nil then
-	begin
-		DebugLog('Window', 'Closing WebView2 controller');
 		FController.Close;
-	end;
 
 	FWebView := nil;
 	FController := nil;
 	FEnvironment := nil;
 
 	CleanupTempFile;
-	DebugLog('Window', 'Destroy leave');
 	inherited;
 end;
 
@@ -524,12 +478,10 @@ procedure TGeminiListerWindow.NavigateToFile(const AHtmlPath: string);
 var
 	LUrl: string;
 begin
-	DebugLog('Navigate', 'path=' + AHtmlPath + ' webview=' + BoolToStr(FWebView <> nil, True));
 	if (FWebView <> nil) and (AHtmlPath <> '') then
 	begin
 		LUrl := 'file:///' + StringReplace(AHtmlPath, '\', '/', [rfReplaceAll]);
 		FWebView.Navigate(PWideChar(LUrl));
-		DebugLog('Navigate', 'Navigate called with url=' + LUrl);
 		HideStatus;
 	end;
 end;
@@ -538,7 +490,6 @@ procedure TGeminiListerWindow.LoadFile(const AFileName: string);
 var
 	LNewTempPath: string;
 begin
-	DebugLog('LoadFile', 'enter, file=' + AFileName);
 	FFileName := AFileName;
 
 	ShowStatus('Parsing ' + TPath.GetFileName(AFileName) + '...');
@@ -548,7 +499,6 @@ begin
 	except
 		on E: Exception do
 		begin
-			DebugLog('LoadFile', 'EXCEPTION in GenerateHtml: ' + E.Message);
 			ShowStatus('Error: ' + E.Message);
 			Exit;
 		end;
@@ -556,23 +506,17 @@ begin
 
 	if LNewTempPath = '' then
 	begin
-		DebugLog('LoadFile', 'GenerateHtml returned empty path');
 		ShowStatus('Error: failed to generate HTML');
 		Exit;
 	end;
-
-	DebugLog('LoadFile', 'HTML generated: ' + LNewTempPath);
 
 	// Cleanup previous temp file
 	CleanupTempFile;
 	FTempHtmlPath := LNewTempPath;
 
 	if FWebViewReady then
-	begin
-		DebugLog('LoadFile', 'WebView ready, navigating immediately');
-		NavigateToFile(FTempHtmlPath);
-	end else begin
-		DebugLog('LoadFile', 'WebView not ready, queuing pending navigation');
+		NavigateToFile(FTempHtmlPath)
+	else begin
 		FPendingNavigation := FTempHtmlPath;
 		ShowStatus('Initializing WebView2...');
 	end;
@@ -584,21 +528,17 @@ var
 	LUserData: string;
 	LHr: HResult;
 begin
-	DebugLog('InitWebView2', 'enter');
 	EnsureComInitialized;
 
 	if not EnsureWebView2Loaded then
 	begin
-		DebugLog('InitWebView2', 'FAILED: WebView2Loader.dll not found');
 		ShowStatus('Error: WebView2Loader.dll not found. Install WebView2 SDK or place the DLL next to the plugin.');
 		Exit;
 	end;
 
 	LUserData := GetUserDataFolder;
-	DebugLog('InitWebView2', 'UserDataFolder=' + LUserData);
 	LHandler := TEnvironmentCompletedHandler.Create(Self);
 	LHr := GCreateEnvironment(nil, PWideChar(LUserData), nil, LHandler);
-	DebugLog('InitWebView2', 'GCreateEnvironment returned 0x' + IntToHex(LHr, 8));
 	if Failed(LHr) then
 		ShowStatus('Error: WebView2 init failed (0x' + IntToHex(LHr, 8) + '). Is Edge WebView2 Runtime installed?');
 end;
@@ -628,7 +568,6 @@ function TEnvironmentCompletedHandler.Invoke(errorCode: HResult; const createdEn
 var
 	LHandler: ICoreWebView2CreateCoreWebView2ControllerCompletedHandler;
 begin
-	DebugLog('EnvCallback', 'Invoke errorCode=0x' + IntToHex(errorCode, 8) + ' env=' + BoolToStr(createdEnvironment <> nil, True));
 	if Failed(errorCode) or (createdEnvironment = nil) then
 	begin
 		FOwner.ShowStatus('Error: WebView2 environment creation failed (0x' + IntToHex(errorCode, 8) + ')');
@@ -638,7 +577,6 @@ begin
 	FOwner.FEnvironment := createdEnvironment;
 	LHandler := TControllerCompletedHandler.Create(FOwner);
 	Result := createdEnvironment.CreateCoreWebView2Controller(FOwner.FPluginWin, LHandler);
-	DebugLog('EnvCallback', 'CreateCoreWebView2Controller returned 0x' + IntToHex(Result, 8));
 	if Failed(Result) then
 		FOwner.ShowStatus('Error: WebView2 controller creation failed (0x' + IntToHex(Result, 8) + ')');
 end;
@@ -659,7 +597,6 @@ var
 	LConfig: TListerConfig;
 	LRect: Winapi.WebView2.tagRECT;
 begin
-	DebugLog('CtrlCallback', 'Invoke errorCode=0x' + IntToHex(errorCode, 8) + ' ctrl=' + BoolToStr(createdController <> nil, True));
 	if Failed(errorCode) or (createdController = nil) then
 	begin
 		FOwner.ShowStatus('Error: WebView2 controller callback failed (0x' + IntToHex(errorCode, 8) + ')');
@@ -668,7 +605,6 @@ begin
 
 	FOwner.FController := createdController;
 	createdController.Get_CoreWebView2(FOwner.FWebView);
-	DebugLog('CtrlCallback', 'Got CoreWebView2, webview=' + BoolToStr(FOwner.FWebView <> nil, True));
 
 	// Configure WebView2 settings
 	LConfig := GetListerConfig;
@@ -691,7 +627,6 @@ begin
 	var LToken: EventRegistrationToken;
 	createdController.add_AcceleratorKeyPressed(
 		TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
-	DebugLog('CtrlCallback', 'AcceleratorKeyPressed handler registered');
 
 	// Size the WebView2 to fill the plugin window
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
@@ -699,12 +634,10 @@ begin
 	createdController.Set_IsVisible(1);
 
 	FOwner.FWebViewReady := True;
-	DebugLog('CtrlCallback', 'WebView2 ready, isVisible=1');
 
 	// Navigate to pending content if file was loaded before WebView2 was ready
 	if FOwner.FPendingNavigation <> '' then
 	begin
-		DebugLog('CtrlCallback', 'Navigating to pending: ' + FOwner.FPendingNavigation);
 		FOwner.NavigateToFile(FOwner.FPendingNavigation);
 		FOwner.FPendingNavigation := '';
 	end;
@@ -758,23 +691,16 @@ var
 	LPluginWin: HWND;
 	LRect: TRect;
 begin
-	DebugLog('ListLoadW', 'enter, file=' + string(FileToLoad) + ' flags=' + IntToStr(ShowFlags));
 	Result := 0;
 
 	RegisterListerClass;
 	if not GClassRegistered then
-	begin
-		DebugLog('ListLoadW', 'FAILED: class not registered');
 		Exit;
-	end;
 
 	GetClientRect(ParentWin, LRect);
 	LPluginWin := CreateWindowEx(0, GEMINI_LISTER_CLASS, nil, WS_CHILD or WS_VISIBLE, 0, 0, LRect.Right - LRect.Left, LRect.Bottom - LRect.Top, ParentWin, 0, HInstance, nil);
 	if LPluginWin = 0 then
-	begin
-		DebugLog('ListLoadW', 'FAILED: CreateWindowEx returned 0, LastError=' + IntToStr(GetLastError));
 		Exit;
-	end;
 
 	LWindow := TGeminiListerWindow.Create(ParentWin, LPluginWin);
 	SetWindowLongPtr(LPluginWin, GWLP_USERDATA, NativeInt(LWindow));
@@ -783,21 +709,16 @@ begin
 	LWindow.InitWebView2;
 
 	Result := LPluginWin;
-	DebugLog('ListLoadW', 'leave, result=0x' + IntToHex(Result, 8));
 end;
 
 function ListLoadNextW(ParentWin: HWND; ListWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): Integer; stdcall;
 var
 	LWindow: TGeminiListerWindow;
 begin
-	DebugLog('ListLoadNextW', 'enter, file=' + string(FileToLoad));
 	Result := LISTPLUGIN_ERROR;
 	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
 	if LWindow = nil then
-	begin
-		DebugLog('ListLoadNextW', 'FAILED: window object is nil');
 		Exit;
-	end;
 
 	try
 		LWindow.LoadFile(string(FileToLoad));
@@ -805,11 +726,9 @@ begin
 	except
 		on E: Exception do
 		begin
-			DebugLog('ListLoadNextW', 'EXCEPTION: ' + E.Message);
 			Result := LISTPLUGIN_ERROR;
 		end;
 	end;
-	DebugLog('ListLoadNextW', 'leave, result=' + IntToStr(Result));
 end;
 
 function ListSearchTextW(ListWin: HWND; SearchString: PWideChar; SearchParameter: Integer): Integer; stdcall;
@@ -818,7 +737,6 @@ var
 	LScript: string;
 	LCaseSensitive, LBackwards: Boolean;
 begin
-	DebugLog('ListSearchTextW', 'search="' + string(SearchString) + '" param=' + IntToStr(SearchParameter));
 	Result := LISTPLUGIN_ERROR;
 	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
 	if (LWindow = nil) or (LWindow.FWebView = nil) then
@@ -870,37 +788,29 @@ procedure ListCloseWindow(ListWin: HWND); stdcall;
 var
 	LWindow: TGeminiListerWindow;
 begin
-	DebugLog('ListCloseWindow', 'enter, win=0x' + IntToHex(ListWin, 8));
 	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
 	SetWindowLongPtr(ListWin, GWLP_USERDATA, 0);
 	if LWindow <> nil then
-	begin
-		DebugLog('ListCloseWindow', 'freeing window object');
 		LWindow.Free;
-	end;
-	DebugLog('ListCloseWindow', 'calling DestroyWindow');
 	DestroyWindow(ListWin);
-	DebugLog('ListCloseWindow', 'leave');
 end;
 
 procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
 const
 	DETECT = 'FINDI("runSettings") & FINDI("models/gemini")';
 begin
-	DebugLog('ListGetDetectString', 'called, maxLen=' + IntToStr(MaxLen));
 	System.AnsiStrings.StrLCopy(DetectString, PAnsiChar(AnsiString(DETECT)), MaxLen - 1);
 end;
 
 procedure ListSetDefaultParams(dps: PListDefaultParamStruct); stdcall;
 begin
-	DebugLog('ListSetDefaultParams', 'called, size=' + IntToStr(dps^.Size) + ' ver=' + IntToStr(dps^.PluginInterfaceVersionHi) + '.' + IntToStr(dps^.PluginInterfaceVersionLow));
+	// Required by TC but no configuration needed at this time
 end;
 
 function ListSendCommand(ListWin: HWND; Command, Parameter: Integer): Integer; stdcall;
 var
 	LWindow: TGeminiListerWindow;
 begin
-	DebugLog('ListSendCommand', 'cmd=' + IntToStr(Command) + ' param=' + IntToStr(Parameter));
 	Result := LISTPLUGIN_ERROR;
 	LWindow := TGeminiListerWindow(GetWindowLongPtr(ListWin, GWLP_USERDATA));
 	if (LWindow = nil) or (LWindow.FWebView = nil) then
@@ -929,13 +839,7 @@ GLoaderHandle := 0;
 GCreateEnvironment := nil;
 GComInitialized := False;
 
-// Set up debug log path next to the DLL
-GDebugLogPath := TPath.Combine(GetPluginDir, 'gemini_debug.log');
-DebugLog('init', 'GeminiWlx initialization, PluginDir=' + GetPluginDir);
-
 finalization
-
-DebugLog('finalization', 'GeminiWlx enter');
 
 // Intentionally NOT calling FreeLibrary(GLoaderHandle) here:
 // finalization runs under DLL_PROCESS_DETACH (loader lock held),
@@ -943,7 +847,5 @@ DebugLog('finalization', 'GeminiWlx enter');
 // The OS will unmap the DLL when the process exits.
 GLoaderHandle := 0;
 GCreateEnvironment := nil;
-
-DebugLog('finalization', 'GeminiWlx leave -- RTL finalization follows');
 
 end.

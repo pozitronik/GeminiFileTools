@@ -13,7 +13,6 @@ library gemini;
 {$ENDIF}
 
 uses
-	Winapi.Windows,
 	WlxApi in 'WlxApi.pas',
 	GeminiWlx in 'GeminiWlx.pas',
 	GeminiFile.Types in '..\src\GeminiFile.Types.pas',
@@ -44,23 +43,5 @@ exports
 	ListSetDefaultParams,
 	ListSendCommand;
 
-procedure GeminiDllProc(AReason: Integer);
 begin
-	case AReason of
-		DLL_PROCESS_DETACH:
-			begin
-				// Use both file log and OutputDebugString (ODS works after RTL teardown)
-				GeminiWlx.DebugLog('DllProc', 'DLL_PROCESS_DETACH -- unit finalization follows');
-				OutputDebugString('gemini.wlx: DLL_PROCESS_DETACH -- unit finalization follows');
-			end;
-		DLL_THREAD_ATTACH:
-			GeminiWlx.DebugLog('DllProc', 'DLL_THREAD_ATTACH');
-		DLL_THREAD_DETACH:
-			GeminiWlx.DebugLog('DllProc', 'DLL_THREAD_DETACH');
-	end;
-end;
-
-begin
-	DllProc := @GeminiDllProc;
-	GeminiWlx.DebugLog('library', 'DllProc installed');
 end.
