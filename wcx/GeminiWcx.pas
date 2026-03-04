@@ -168,8 +168,8 @@ const
 	DEF_CombineBlocksHtml = False;
 
 var
-	/// Tracks live archive handles for validation
-	GArchives: TList<TGeminiArchive>;
+	/// Tracks live archive handles for validation (thread-safe for background unpack)
+	GArchives: TThreadList<TGeminiArchive>;
 	/// Cached custom CSS from gemini.css next to the DLL
 	GCustomCSS: string;
 	GCustomCSSLoaded: Boolean;
@@ -259,8 +259,17 @@ begin
 end;
 
 function IsValidHandle(hArcData: THandle): Boolean;
+var
+	LList: TList<TGeminiArchive>;
 begin
-	Result := (hArcData <> 0) and GArchives.Contains(TGeminiArchive(hArcData));
+	if hArcData = 0 then
+		Exit(False);
+	LList := GArchives.LockList;
+	try
+		Result := LList.Contains(TGeminiArchive(hArcData));
+	finally
+		GArchives.UnlockList;
+	end;
 end;
 
 /// <summary>
@@ -899,15 +908,20 @@ end;
 
 initialization
 
-GArchives := TList<TGeminiArchive>.Create;
+GArchives := TThreadList<TGeminiArchive>.Create;
 
 finalization
 
 // Free any leaked archive handles
-while GArchives.Count > 0 do
-begin
-	GArchives[0].Free;
-	GArchives.Delete(0);
+var LList := GArchives.LockList;
+try
+	while LList.Count > 0 do
+	begin
+		LList[0].Free;
+		LList.Delete(0);
+	end;
+finally
+	GArchives.UnlockList;
 end;
 GArchives.Free;
 
