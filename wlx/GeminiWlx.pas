@@ -703,6 +703,7 @@ begin
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
 	createdController.Set_Bounds(LRect);
 	createdController.Set_IsVisible(1);
+	createdController.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
 
 	FOwner.FWebViewReady := True;
 
