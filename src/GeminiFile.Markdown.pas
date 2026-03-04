@@ -77,47 +77,49 @@ type
 /// </summary>
 procedure ExtractInlineCode(var AText: string; out APlaceholders: TArray<TCodePlaceholder>);
 var
-	LResult: string;
+	LSB: TStringBuilder;
 	I, LStart, LEnd: Integer;
 	LCount: Integer;
 	LCode, LToken: string;
 begin
 	LCount := 0;
 	SetLength(APlaceholders, 0);
-	LResult := '';
-	I := 1;
-
-	while I <= Length(AText) do
-	begin
-		if AText[I] = '`' then
+	LSB := TStringBuilder.Create(Length(AText));
+	try
+		I := 1;
+		while I <= Length(AText) do
 		begin
-			LStart := I + 1;
-			LEnd := LStart;
-			while (LEnd <= Length(AText)) and (AText[LEnd] <> '`') do
-				Inc(LEnd);
-
-			if LEnd <= Length(AText) then
+			if AText[I] = '`' then
 			begin
-				// Found closing backtick
-				LCode := Copy(AText, LStart, LEnd - LStart);
-				LToken := #1 + 'CODE' + IntToStr(LCount) + #1;
+				LStart := I + 1;
+				LEnd := LStart;
+				while (LEnd <= Length(AText)) and (AText[LEnd] <> '`') do
+					Inc(LEnd);
 
-				Inc(LCount);
-				SetLength(APlaceholders, LCount);
-				APlaceholders[LCount - 1].Token := LToken;
-				APlaceholders[LCount - 1].Html := '<code>' + HtmlEscape(LCode) + '</code>';
+				if LEnd <= Length(AText) then
+				begin
+					// Found closing backtick
+					LCode := Copy(AText, LStart, LEnd - LStart);
+					LToken := #1 + 'CODE' + IntToStr(LCount) + #1;
 
-				LResult := LResult + LToken;
-				I := LEnd + 1;
-				Continue;
+					Inc(LCount);
+					SetLength(APlaceholders, LCount);
+					APlaceholders[LCount - 1].Token := LToken;
+					APlaceholders[LCount - 1].Html := '<code>' + HtmlEscape(LCode) + '</code>';
+
+					LSB.Append(LToken);
+					I := LEnd + 1;
+					Continue;
+				end;
 			end;
+
+			LSB.Append(AText[I]);
+			Inc(I);
 		end;
-
-		LResult := LResult + AText[I];
-		Inc(I);
+		AText := LSB.ToString;
+	finally
+		LSB.Free;
 	end;
-
-	AText := LResult;
 end;
 
 /// <summary>
@@ -144,57 +146,61 @@ procedure ApplyInlineMarker(var AText: string; const AMarker, AOpenTag, ACloseTa
 var
 	LMarkerLen: Integer;
 	LOpenPos, LClosePos: Integer;
-	LResult: string;
+	LSB: TStringBuilder;
 	LSearchFrom: Integer;
 	LAfterOpen, LBeforeClose: Char;
 begin
 	LMarkerLen := Length(AMarker);
-	LResult := '';
-	LSearchFrom := 1;
+	LSB := TStringBuilder.Create(Length(AText));
+	try
+		LSearchFrom := 1;
 
-	while LSearchFrom <= Length(AText) do
-	begin
-		LOpenPos := Pos(AMarker, AText, LSearchFrom);
-		if LOpenPos = 0 then
-			Break;
-
-		// Flanking check: char after opening marker must be non-space
-		if LOpenPos + LMarkerLen > Length(AText) then
-			Break;
-		LAfterOpen := AText[LOpenPos + LMarkerLen];
-		if (LAfterOpen = ' ') or (LAfterOpen = #9) or (LAfterOpen = #10) or (LAfterOpen = #13) then
+		while LSearchFrom <= Length(AText) do
 		begin
-			// Not a valid opening -- copy up to and including this marker, continue
-			LResult := LResult + Copy(AText, LSearchFrom, LOpenPos + LMarkerLen - LSearchFrom);
-			LSearchFrom := LOpenPos + LMarkerLen;
-			Continue;
+			LOpenPos := Pos(AMarker, AText, LSearchFrom);
+			if LOpenPos = 0 then
+				Break;
+
+			// Flanking check: char after opening marker must be non-space
+			if LOpenPos + LMarkerLen > Length(AText) then
+				Break;
+			LAfterOpen := AText[LOpenPos + LMarkerLen];
+			if (LAfterOpen = ' ') or (LAfterOpen = #9) or (LAfterOpen = #10) or (LAfterOpen = #13) then
+			begin
+				// Not a valid opening -- copy up to and including this marker, continue
+				LSB.Append(Copy(AText, LSearchFrom, LOpenPos + LMarkerLen - LSearchFrom));
+				LSearchFrom := LOpenPos + LMarkerLen;
+				Continue;
+			end;
+
+			// Search for closing marker
+			LClosePos := Pos(AMarker, AText, LOpenPos + LMarkerLen);
+			if LClosePos = 0 then
+				Break;
+
+			// Flanking check: char before closing marker must be non-space
+			LBeforeClose := AText[LClosePos - 1];
+			if (LBeforeClose = ' ') or (LBeforeClose = #9) or (LBeforeClose = #10) or (LBeforeClose = #13) then
+			begin
+				LSB.Append(Copy(AText, LSearchFrom, LOpenPos + LMarkerLen - LSearchFrom));
+				LSearchFrom := LOpenPos + LMarkerLen;
+				Continue;
+			end;
+
+			// Valid match: emit text before marker, then wrapped content
+			LSB.Append(Copy(AText, LSearchFrom, LOpenPos - LSearchFrom));
+			LSB.Append(AOpenTag);
+			LSB.Append(Copy(AText, LOpenPos + LMarkerLen, LClosePos - LOpenPos - LMarkerLen));
+			LSB.Append(ACloseTag);
+			LSearchFrom := LClosePos + LMarkerLen;
 		end;
 
-		// Search for closing marker
-		LClosePos := Pos(AMarker, AText, LOpenPos + LMarkerLen);
-		if LClosePos = 0 then
-			Break;
-
-		// Flanking check: char before closing marker must be non-space
-		LBeforeClose := AText[LClosePos - 1];
-		if (LBeforeClose = ' ') or (LBeforeClose = #9) or (LBeforeClose = #10) or (LBeforeClose = #13) then
-		begin
-			LResult := LResult + Copy(AText, LSearchFrom, LOpenPos + LMarkerLen - LSearchFrom);
-			LSearchFrom := LOpenPos + LMarkerLen;
-			Continue;
-		end;
-
-		// Valid match: emit text before marker, then wrapped content
-		LResult := LResult + Copy(AText, LSearchFrom, LOpenPos - LSearchFrom);
-		LResult := LResult + AOpenTag +
-			Copy(AText, LOpenPos + LMarkerLen, LClosePos - LOpenPos - LMarkerLen) +
-			ACloseTag;
-		LSearchFrom := LClosePos + LMarkerLen;
+		// Append remainder
+		LSB.Append(Copy(AText, LSearchFrom, MaxInt));
+		AText := LSB.ToString;
+	finally
+		LSB.Free;
 	end;
-
-	// Append remainder
-	LResult := LResult + Copy(AText, LSearchFrom, MaxInt);
-	AText := LResult;
 end;
 
 /// <summary>
@@ -226,36 +232,40 @@ var
 	LParagraphs: TArray<string>;
 	I: Integer;
 	LPara: string;
-	LResult: string;
+	LSB: TStringBuilder;
+	LNormalized: string;
 begin
 	if AText = '' then
 		Exit('');
 
 	// Normalize line endings to LF for consistent splitting
-	LResult := StringReplace(AText, #13#10, #10, [rfReplaceAll]);
-	LResult := StringReplace(LResult, #13, #10, [rfReplaceAll]);
+	LNormalized := StringReplace(AText, #13#10, #10, [rfReplaceAll]);
+	LNormalized := StringReplace(LNormalized, #13, #10, [rfReplaceAll]);
 
 	// Split on double newlines into paragraphs
-	LParagraphs := SplitString(LResult, #10#10);
+	LParagraphs := SplitString(LNormalized, #10#10);
 
-	LResult := '';
-	for I := 0 to High(LParagraphs) do
-	begin
-		LPara := LParagraphs[I];
+	LSB := TStringBuilder.Create;
+	try
+		for I := 0 to High(LParagraphs) do
+		begin
+			LPara := LParagraphs[I];
 
-		// Skip empty paragraphs
-		if Trim(LPara) = '' then
-			Continue;
+			// Skip empty paragraphs
+			if Trim(LPara) = '' then
+				Continue;
 
-		LPara := FormatInline(LPara);
+			LPara := FormatInline(LPara);
 
-		// Single newlines become <br>
-		LPara := StringReplace(LPara, #10, '<br>', [rfReplaceAll]);
+			// Single newlines become <br>
+			LPara := StringReplace(LPara, #10, '<br>', [rfReplaceAll]);
 
-		LResult := LResult + '<p>' + LPara + '</p>';
+			LSB.Append('<p>').Append(LPara).Append('</p>');
+		end;
+		Result := LSB.ToString;
+	finally
+		LSB.Free;
 	end;
-
-	Result := LResult;
 end;
 
 function MarkdownToHtml(const AText: string): string;
@@ -264,11 +274,11 @@ var
 	LLines: TArray<string>;
 	I: Integer;
 	LInCodeBlock: Boolean;
-	LCodeLang, LCodeContent: string;
-	LProseAccum: string;
-	LResult: string;
+	LCodeLang: string;
+	LResult, LCodeContent, LProseAccum: TStringBuilder;
 	LLine, LTrimmed: string;
 	LLevel: Integer;
+	LCodeStr: string;
 begin
 	if AText = '' then
 		Exit('');
@@ -278,96 +288,107 @@ begin
 	LNormalized := StringReplace(LNormalized, #13, #10, [rfReplaceAll]);
 
 	LLines := SplitString(LNormalized, #10);
-	LResult := '';
-	LProseAccum := '';
-	LInCodeBlock := False;
-	LCodeLang := '';
-	LCodeContent := '';
+	LResult := TStringBuilder.Create;
+	LCodeContent := TStringBuilder.Create;
+	LProseAccum := TStringBuilder.Create;
+	try
+		LInCodeBlock := False;
+		LCodeLang := '';
 
-	for I := 0 to High(LLines) do
-	begin
-		LLine := LLines[I];
-		LTrimmed := TrimLeft(LLine);
-
-		// Check for code fence (``` at start of line, possibly with leading whitespace)
-		if (Length(LTrimmed) >= 3) and (Copy(LTrimmed, 1, 3) = '```') then
+		for I := 0 to High(LLines) do
 		begin
-			if not LInCodeBlock then
-			begin
-				// Opening fence -- flush accumulated prose
-				if LProseAccum <> '' then
-				begin
-					LResult := LResult + ProcessProse(LProseAccum);
-					LProseAccum := '';
-				end;
-				LInCodeBlock := True;
-				LCodeLang := Trim(Copy(LTrimmed, 4, MaxInt));
-				LCodeContent := '';
-			end
-			else
-			begin
-				// Closing fence -- emit code block
-				// Remove trailing LF if present
-				if (LCodeContent <> '') and (LCodeContent[Length(LCodeContent)] = #10) then
-					LCodeContent := Copy(LCodeContent, 1, Length(LCodeContent) - 1);
+			LLine := LLines[I];
+			LTrimmed := TrimLeft(LLine);
 
-				if LCodeLang <> '' then
-					LResult := LResult + '<pre><code class="language-' +
-						HtmlEscape(LCodeLang) + '">' + HtmlEscape(LCodeContent) + '</code></pre>'
+			// Check for code fence (``` at start of line, possibly with leading whitespace)
+			if (Length(LTrimmed) >= 3) and (Copy(LTrimmed, 1, 3) = '```') then
+			begin
+				if not LInCodeBlock then
+				begin
+					// Opening fence -- flush accumulated prose
+					if LProseAccum.Length > 0 then
+					begin
+						LResult.Append(ProcessProse(LProseAccum.ToString));
+						LProseAccum.Clear;
+					end;
+					LInCodeBlock := True;
+					LCodeLang := Trim(Copy(LTrimmed, 4, MaxInt));
+					LCodeContent.Clear;
+				end
 				else
-					LResult := LResult + '<pre><code>' + HtmlEscape(LCodeContent) + '</code></pre>';
-				LInCodeBlock := False;
-				LCodeLang := '';
-				LCodeContent := '';
-			end;
-			Continue;
-		end;
-
-		if LInCodeBlock then
-		begin
-			// Accumulate code content with original line endings
-			LCodeContent := LCodeContent + LLine + #10;
-			Continue;
-		end;
-
-		// Check for ATX heading (# through ######, must be followed by a space)
-		if (Length(LTrimmed) >= 2) and (LTrimmed[1] = '#') then
-		begin
-			LLevel := 0;
-			while (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = '#') do
-				Inc(LLevel);
-			if (LLevel <= 6) and (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = ' ') then
-			begin
-				// Flush accumulated prose
-				if LProseAccum <> '' then
 				begin
-					LResult := LResult + ProcessProse(LProseAccum);
-					LProseAccum := '';
+					// Closing fence -- emit code block
+					LCodeStr := LCodeContent.ToString;
+					// Remove trailing LF if present
+					if (LCodeStr <> '') and (LCodeStr[Length(LCodeStr)] = #10) then
+						LCodeStr := Copy(LCodeStr, 1, Length(LCodeStr) - 1);
+
+					if LCodeLang <> '' then
+						LResult.Append('<pre><code class="language-')
+							.Append(HtmlEscape(LCodeLang))
+							.Append('">')
+							.Append(HtmlEscape(LCodeStr))
+							.Append('</code></pre>')
+					else
+						LResult.Append('<pre><code>')
+							.Append(HtmlEscape(LCodeStr))
+							.Append('</code></pre>');
+					LInCodeBlock := False;
+					LCodeLang := '';
+					LCodeContent.Clear;
 				end;
-				LResult := LResult + '<h' + IntToStr(LLevel) + '>' +
-					FormatInline(Trim(Copy(LTrimmed, LLevel + 2, MaxInt))) +
-					'</h' + IntToStr(LLevel) + '>';
 				Continue;
 			end;
+
+			if LInCodeBlock then
+			begin
+				// Accumulate code content with original line endings
+				LCodeContent.Append(LLine).Append(#10);
+				Continue;
+			end;
+
+			// Check for ATX heading (# through ######, must be followed by a space)
+			if (Length(LTrimmed) >= 2) and (LTrimmed[1] = '#') then
+			begin
+				LLevel := 0;
+				while (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = '#') do
+					Inc(LLevel);
+				if (LLevel <= 6) and (LLevel < Length(LTrimmed)) and (LTrimmed[LLevel + 1] = ' ') then
+				begin
+					// Flush accumulated prose
+					if LProseAccum.Length > 0 then
+					begin
+						LResult.Append(ProcessProse(LProseAccum.ToString));
+						LProseAccum.Clear;
+					end;
+					LResult.Append('<h').Append(LLevel).Append('>')
+						.Append(FormatInline(Trim(Copy(LTrimmed, LLevel + 2, MaxInt))))
+						.Append('</h').Append(LLevel).Append('>');
+					Continue;
+				end;
+			end;
+
+			// Accumulate prose lines
+			if LProseAccum.Length > 0 then
+				LProseAccum.Append(#10);
+			LProseAccum.Append(LLine);
 		end;
 
-		// Accumulate prose lines
-		if LProseAccum <> '' then
-			LProseAccum := LProseAccum + #10;
-		LProseAccum := LProseAccum + LLine;
+		// Handle unclosed code block (treat as prose)
+		if LInCodeBlock then
+			LProseAccum.Append(#10).Append('```').Append(LCodeLang)
+				.Append(#10).Append(LCodeContent.ToString);
+
+		// Flush remaining prose
+		if LProseAccum.Length > 0 then
+			LResult.Append(ProcessProse(LProseAccum.ToString));
+
+		Result := LResult.ToString;
+	finally
+		LProseAccum.Free;
+		LCodeContent.Free;
+		LResult.Free;
 	end;
-
-	// Handle unclosed code block (treat as prose)
-	if LInCodeBlock then
-	begin
-		LProseAccum := LProseAccum + #10 + '```' + LCodeLang + #10 + LCodeContent;
-	end;
-
-	// Flush remaining prose
-	if LProseAccum <> '' then
-		LResult := LResult + ProcessProse(LProseAccum);
-
-	Result := LResult;
 end;
 
 end.
