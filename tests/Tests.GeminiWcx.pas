@@ -38,6 +38,8 @@ type
 		procedure FileTime_SetFromSourceFile;
 		[Test]
 		procedure ResourcePaths_MatchResourceInfoPaths;
+		[Test]
+		procedure FileWithThinkingResources_HasThinkSubdirectory;
 	end;
 
 	[TestFixture]
@@ -491,6 +493,50 @@ begin
 				Format('Resource path mismatch at index %d', [I]));
 	finally
 		LResourcePaths.Free;
+	end;
+end;
+
+procedure TTestGeminiWcxVirtualFileList.FileWithThinkingResources_HasThinkSubdirectory;
+var
+	LArchive: TGeminiArchive;
+	LHeader: THeaderDataExW;
+	LPath, LFileName: string;
+	LHasThinkDir, LHasThinkResource: Boolean;
+begin
+	// Create temp file with a thinking chunk that has an embedded resource
+	LPath := TPath.Combine(TPath.GetTempPath, 'gemini_think_test_' + TGUID.NewGuid.ToString);
+	TFile.WriteAllText(LPath,
+		'{"runSettings":{"model":"models/gemini-2.5-pro"},"chunkedPrompt":{"chunks":[' +
+		'{"text":"question","role":"user"},' +
+		'{"text":"","role":"model","isThought":true,"parts":[' +
+		'{"text":"analyzing","isThought":true,' +
+		'"inlineData":{"mimeType":"image/png",' +
+		'"data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}}]},' +
+		'{"text":"answer","role":"model","tokenCount":10}]}}',
+		TEncoding.UTF8);
+	try
+		LArchive := TGeminiArchive.Create(LPath, PK_OM_LIST);
+		try
+			LHasThinkDir := False;
+			LHasThinkResource := False;
+			while LArchive.ReadNextHeader(LHeader) = 0 do
+			begin
+				LFileName := LHeader.FileName;
+				if LFileName = 'resources\think' then
+					LHasThinkDir := True;
+				if LFileName.StartsWith('resources\think\resource_') then
+					LHasThinkResource := True;
+				LArchive.ProcessCurrentFile(PK_SKIP, '', '');
+			end;
+			Assert.IsTrue(LHasThinkDir,
+				'Should have resources\think directory for thinking resources');
+			Assert.IsTrue(LHasThinkResource,
+				'Should have resource file in resources\think subdirectory');
+		finally
+			LArchive.Free;
+		end;
+	finally
+		TFile.Delete(LPath);
 	end;
 end;
 

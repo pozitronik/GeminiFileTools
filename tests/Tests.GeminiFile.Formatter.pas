@@ -134,6 +134,10 @@ type
 		[Test]
 		procedure ThinkingWithTimestampAndResource_CombinedSummary;
 		[Test]
+		procedure ThinkingWithTimestampOnly_DisplaysTimestamp;
+		[Test]
+		procedure ThinkingChunkWithNonThoughtParts_FallsBackToText;
+		[Test]
 		procedure SourceFileName_IncludedInTitle;
 	end;
 
@@ -891,6 +895,45 @@ begin
 	// Summary should contain both timestamp and "with attachment"
 	Assert.Contains(LResult, '2026-03-01 12:00:00');
 	Assert.Contains(LResult, 'with attachment');
+end;
+
+procedure TTestGeminiMarkdownFormatter.ThinkingChunkWithNonThoughtParts_FallsBackToText;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+	LPart: TGeminiPart;
+begin
+	// Thinking chunk with parts where none are thought parts --
+	// GetThinkingText returns '' -> formatter falls back to LChunk.Text
+	LChunk := TGeminiChunk.Create;
+	LChunk.Role := grModel;
+	LChunk.Text := 'Fallback content from Text field';
+	LChunk.IsThought := True;
+	LChunk.Index := FChunks.Count;
+	LPart := TGeminiPart.Create;
+	LPart.Text := 'Non-thought part text';
+	LPart.IsThought := False;
+	LChunk.Parts.Add(LPart);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, 'Fallback content from Text field',
+		'Should use LChunk.Text as fallback when GetThinkingText returns empty');
+end;
+
+procedure TTestGeminiMarkdownFormatter.ThinkingWithTimestampOnly_DisplaysTimestamp;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	// Thinking chunk with timestamp but no resource --
+	// covers ThinkingSummarySuffix timestamp-only branch
+	LChunk := MakeChunk(grModel, 'Reasoning step...', 0, True);
+	LChunk.CreateTime := EncodeDate(2026, 3, 1) + EncodeTime(14, 30, 0, 0);
+	FChunks.Add(LChunk);
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '2026-03-01 14:30:00');
+	Assert.IsFalse(LResult.Contains('attachment'),
+		'Should not mention attachment when no resource is present');
 end;
 
 procedure TTestGeminiMarkdownFormatter.SourceFileName_IncludedInTitle;

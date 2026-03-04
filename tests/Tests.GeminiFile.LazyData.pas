@@ -56,6 +56,10 @@ type
 		procedure Scan_MultiByteUtf8InDataValue_HandledCorrectly;
 		[Test]
 		procedure Scan_UnterminatedString_DoesNotCrash;
+		[Test]
+		procedure Scan_EscapedCharsInDataValue_CorrectOffsets;
+		[Test]
+		procedure Scan_ManyDataValues_ArrayGrowsBeyondInitial;
 	end;
 
 	// =====================================================================
@@ -101,6 +105,8 @@ type
 		procedure CreateLazy_IsLazy_ReturnsTrue;
 		[Test]
 		procedure Create_Regular_IsLazy_ReturnsFalse;
+		[Test]
+		procedure Create_Regular_PlaceholderIndex_ReturnsMinusOne;
 	end;
 
 	// =====================================================================
@@ -480,6 +486,54 @@ begin
 		'Unterminated key should produce no locations');
 end;
 
+procedure TTestPreScanner.Scan_EscapedCharsInDataValue_CorrectOffsets;
+var
+	LData: string;
+	LJson: string;
+	LBytes: TBytes;
+	LResult: TPreScanResult;
+	LLocation: TBase64Location;
+	LExtracted: string;
+begin
+	// Text field contains escaped characters (\", \\) before the data field.
+	// Tests that FindStringEnd correctly skips backslash-escaped chars.
+	LData := MakeBase64(2000);
+	LJson := '{"text":"He said \"hello\" and \\path","data":"' + LData + '"}';
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(1, Length(LResult.Locations),
+		'Should strip exactly 1 data value');
+	LLocation := LResult.Locations[0];
+	LExtracted := TEncoding.UTF8.GetString(LBytes, LLocation.ByteOffset, LLocation.ByteLength);
+	Assert.AreEqual(LData, LExtracted,
+		'Extracted data should match original despite escaped chars in text');
+end;
+
+procedure TTestPreScanner.Scan_ManyDataValues_ArrayGrowsBeyondInitial;
+var
+	I: Integer;
+	LData: string;
+	LJson: string;
+	LBytes: TBytes;
+	LResult: TPreScanResult;
+begin
+	// Create JSON with 20 data values to trigger dynamic array growth
+	// (initial capacity is 16, growth at line 195 doubles it)
+	LData := MakeBase64(2000);
+	LJson := '{"items":[';
+	for I := 0 to 19 do
+	begin
+		if I > 0 then
+			LJson := LJson + ',';
+		LJson := LJson + '{"mimeType":"image/png","data":"' + LData + '"}';
+	end;
+	LJson := LJson + ']}';
+	LBytes := MakeJsonBytes(LJson);
+	LResult := PreScanGeminiFile(LBytes);
+	Assert.AreEqual<Integer>(20, Length(LResult.Locations),
+		'Should find all 20 data values after array growth beyond initial 16');
+end;
+
 // =========================================================================
 // TTestLazyLoad
 // =========================================================================
@@ -771,6 +825,20 @@ begin
 	LRes := TGeminiResource.Create('image/png', 'AAAA', 0);
 	try
 		Assert.IsFalse(LRes.IsLazy);
+	finally
+		LRes.Free;
+	end;
+end;
+
+procedure TTestLazyResource.Create_Regular_PlaceholderIndex_ReturnsMinusOne;
+var
+	LRes: TGeminiResource;
+begin
+	// Regular (non-lazy) resource should return -1 for placeholder index
+	LRes := TGeminiResource.Create('image/png', 'AAAA', 0);
+	try
+		Assert.AreEqual<Integer>(-1, LRes.GetLazyPlaceholderIndex,
+			'Non-lazy resource should return -1 for placeholder index');
 	finally
 		LRes.Free;
 	end;
