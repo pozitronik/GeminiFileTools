@@ -118,6 +118,13 @@ function GetListerConfig: TListerConfig;
 // --- Thumbnail helpers (public for testability) ---
 
 /// <summary>
+///   Scans a stream for a byte marker using overlapping buffer reads.
+///   Returns byte offset of the first occurrence at or after AStartPos,
+///   or -1 if not found. On success, AStream.Position is right after the marker.
+/// </summary>
+function FindByteMarker(AStream: TStream; const AMarker: RawByteString; AStartPos: Int64 = 0): Int64;
+
+/// <summary>
 ///   Binary scan for "role" markers in a Gemini file.
 ///   For each marker, reads ahead past : and " to determine user vs model.
 ///   Returns array of role markers with byte offsets. No JSON parsing.
@@ -912,6 +919,42 @@ const
 	/// Buffer size for binary search through file content
 	THUMB_SEARCH_BUF_SIZE = 65536;
 
+function FindByteMarker(AStream: TStream; const AMarker: RawByteString; AStartPos: Int64): Int64;
+var
+	LBuf: TBytes;
+	LBytesRead, LOverlap, I, LMarkerLen: Integer;
+	LFilePos: Int64;
+begin
+	Result := -1;
+	LMarkerLen := Length(AMarker);
+	if (LMarkerLen = 0) or (AStartPos >= AStream.Size) then
+		Exit;
+
+	LOverlap := LMarkerLen - 1;
+	SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
+	LFilePos := AStartPos;
+
+	while LFilePos < AStream.Size do
+	begin
+		AStream.Position := LFilePos;
+		LBytesRead := AStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
+		if LBytesRead < LMarkerLen then
+			Exit;
+
+		for I := 0 to LBytesRead - LMarkerLen do
+		begin
+			if CompareMem(@LBuf[I], @AMarker[1], LMarkerLen) then
+			begin
+				AStream.Position := LFilePos + I + LMarkerLen;
+				Result := LFilePos + I;
+				Exit;
+			end;
+		end;
+
+		Inc(LFilePos, LBytesRead - LOverlap);
+	end;
+end;
+
 	/// <summary>
 	///   Performs a fast binary search for the first embedded image in a Gemini file.
 	///   Locates the "inlineImage" marker, then extracts the base64 "data" field
@@ -921,91 +964,20 @@ function FindFirstImageBase64(const AFileName: string; out ABase64: TBytes): Boo
 var
 	LStream: TFileStream;
 	LBuf: TBytes;
-	LBytesRead, LOverlap, LPos, I: Integer;
-	LFilePos: Int64;
-	LMarker: RawByteString;
-	LDataKey: RawByteString;
-	LFound: Boolean;
+	LBytesRead, LPos, I: Integer;
 	LByte: Byte;
-	LRESULT: TBytesStream;
+	LResult: TBytesStream;
 begin
 	Result := False;
-	LMarker := RawByteString('"inlineImage"');
-	LDataKey := RawByteString('"data"');
 
 	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
 	try
-		LOverlap := Length(LMarker) - 1;
-		SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
-		LFilePos := 0;
-		LFound := False;
-
-		// Phase 1: find "inlineImage" marker using overlapping buffer reads
-		while LFilePos < LStream.Size do
-		begin
-			LStream.Position := LFilePos;
-			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
-			if LBytesRead = 0 then
-				Break;
-
-			// Search for marker in current buffer
-			for I := 0 to LBytesRead - Length(LMarker) do
-			begin
-				if CompareMem(@LBuf[I], @LMarker[1], Length(LMarker)) then
-				begin
-					// Position stream right after the marker
-					LStream.Position := LFilePos + I + Length(LMarker);
-					LFound := True;
-					Break;
-				end;
-			end;
-
-			if LFound then
-				Break;
-
-			// Not enough bytes left to contain the marker -- already checked via overlap
-			if LBytesRead < Length(LMarker) then
-				Break;
-
-			// Advance with overlap to catch markers spanning buffer boundaries
-			Inc(LFilePos, LBytesRead - LOverlap);
-		end;
-
-		if not LFound then
+		// Phase 1: find "inlineImage" marker
+		if FindByteMarker(LStream, '"inlineImage"') < 0 then
 			Exit;
 
-		// Phase 2: find "data" key after the marker (within the same inlineImage object)
-		LFilePos := LStream.Position;
-		LFound := False;
-
-		while LFilePos < LStream.Size do
-		begin
-			LStream.Position := LFilePos;
-			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
-			if LBytesRead = 0 then
-				Break;
-
-			for I := 0 to LBytesRead - Length(LDataKey) do
-			begin
-				if CompareMem(@LBuf[I], @LDataKey[1], Length(LDataKey)) then
-				begin
-					LStream.Position := LFilePos + I + Length(LDataKey);
-					LFound := True;
-					Break;
-				end;
-			end;
-
-			if LFound then
-				Break;
-
-			// Not enough bytes left to contain the key -- already checked via overlap
-			if LBytesRead < Length(LDataKey) then
-				Break;
-
-			Inc(LFilePos, LBytesRead - (Length(LDataKey) - 1));
-		end;
-
-		if not LFound then
+		// Phase 2: find "data" key after the marker
+		if FindByteMarker(LStream, '"data"', LStream.Position) < 0 then
 			Exit;
 
 		// Phase 3: skip past `:` and whitespace to the opening `"` of the value
@@ -1017,7 +989,7 @@ begin
 		end;
 
 		// Phase 4: read base64 content until closing `"`
-		LRESULT := TBytesStream.Create;
+		LResult := TBytesStream.Create;
 		try
 			SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
 			while LStream.Position < LStream.Size do
@@ -1039,20 +1011,20 @@ begin
 				if LPos >= 0 then
 				begin
 					if LPos > 0 then
-						LRESULT.WriteBuffer(LBuf[0], LPos);
+						LResult.WriteBuffer(LBuf[0], LPos);
 					Break;
 				end
 				else
-					LRESULT.WriteBuffer(LBuf[0], LBytesRead);
+					LResult.WriteBuffer(LBuf[0], LBytesRead);
 			end;
 
-			if LRESULT.Size > 0 then
+			if LResult.Size > 0 then
 			begin
-				ABase64 := Copy(LRESULT.Bytes, 0, LRESULT.Size);
+				ABase64 := Copy(LResult.Bytes, 0, LResult.Size);
 				Result := True;
 			end;
 		finally
-			LRESULT.Free;
+			LResult.Free;
 		end;
 	finally
 		LStream.Free;
@@ -1198,69 +1170,54 @@ end;
 function ScanRoleMarkers(const AFileName: string; out AFileSize: Int64): TArray<TRoleMarker>;
 var
 	LStream: TFileStream;
-	LBuf: TBytes;
-	LBytesRead, LOverlap, I: Integer;
-	LFilePos: Int64;
-	LMarker: RawByteString;
 	LByte: Byte;
 	LMarkerList: TList<TRoleMarker>;
 	LRoleMarker: TRoleMarker;
+	LOffset: Int64;
+	LSearchFrom: Int64;
 begin
 	Result := nil;
 	AFileSize := 0;
-	LMarker := RawByteString('"role"');
 
 	LMarkerList := TList<TRoleMarker>.Create;
 	try
 		LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
 		try
 			AFileSize := LStream.Size;
-			LOverlap := Length(LMarker) - 1;
-			SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
-			LFilePos := 0;
+			LSearchFrom := 0;
 
-			while LFilePos < LStream.Size do
+			while True do
 			begin
-				LStream.Position := LFilePos;
-				LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
-				if LBytesRead = 0 then
+				LOffset := FindByteMarker(LStream, '"role"', LSearchFrom);
+				if LOffset < 0 then
 					Break;
 
-				for I := 0 to LBytesRead - Length(LMarker) do
+				// Skip whitespace and colon to find opening quote
+				while LStream.Position < LStream.Size do
 				begin
-					if CompareMem(@LBuf[I], @LMarker[1], Length(LMarker)) then
-					begin
-						// Found "role" -- read ahead past : and " to get first char of value
-						LStream.Position := LFilePos + I + Length(LMarker);
-
-						// Skip whitespace and colon to find opening quote
-						while LStream.Position < LStream.Size do
-						begin
-							LStream.ReadBuffer(LByte, 1);
-							if LByte = Ord('"') then
-								Break;
-						end;
-
-						// Read first character of the role value
-						if LStream.Position < LStream.Size then
-						begin
-							LStream.ReadBuffer(LByte, 1);
-							LRoleMarker.ByteOffset := LFilePos + I;
-							if LByte = Ord('u') then
-								LRoleMarker.Role := 0 // user
-							else if LByte = Ord('m') then
-								LRoleMarker.Role := 1 // model
-							else
-								Continue; // unknown role, skip
-							LMarkerList.Add(LRoleMarker);
-						end;
-					end;
+					LStream.ReadBuffer(LByte, 1);
+					if LByte = Ord('"') then
+						Break;
 				end;
 
-				if LBytesRead < Length(LMarker) then
-					Break;
+				// Read first character of the role value
+				if LStream.Position < LStream.Size then
+				begin
+					LStream.ReadBuffer(LByte, 1);
+					LRoleMarker.ByteOffset := LOffset;
+					if LByte = Ord('u') then
+						LRoleMarker.Role := 0 // user
+					else if LByte = Ord('m') then
+						LRoleMarker.Role := 1 // model
+					else
+					begin
+						LSearchFrom := LStream.Position;
+						Continue; // unknown role, skip
+					end;
+					LMarkerList.Add(LRoleMarker);
+				end;
 
-				Inc(LFilePos, LBytesRead - LOverlap);
+				LSearchFrom := LStream.Position;
 			end;
 		finally
 			LStream.Free;
@@ -1353,9 +1310,8 @@ function ExtractFirstUserText(const AFileName: string; AMaxChars: Integer = 200)
 var
 	LStream: TFileStream;
 	LBuf: TBytes;
-	LBytesRead, LOverlap, I, LPos: Integer;
+	LBytesRead, I, LPos: Integer;
 	LFilePos, LUserOffset: Int64;
-	LRoleMarker: RawByteString;
 	LTextKey: RawByteString;
 	LByte: Byte;
 	LFound: Boolean;
@@ -1365,64 +1321,40 @@ var
 	LHexBuf: array [0 .. 3] of Byte;
 	LCodePoint: Integer;
 	LUtf8: UTF8String;
+	LSearchFrom: Int64;
 begin
 	Result := '';
-	LRoleMarker := RawByteString('"role"');
 	LTextKey := RawByteString('"text"');
 
 	LStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
 	try
-		SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
-		LOverlap := Length(LRoleMarker) - 1;
-		LFilePos := 0;
-		LUserOffset := -1;
-
 		// Phase 1: find first "role" with value starting with 'u'
-		while LFilePos < LStream.Size do
+		LSearchFrom := 0;
+		while True do
 		begin
-			LStream.Position := LFilePos;
-			LBytesRead := LStream.Read(LBuf[0], THUMB_SEARCH_BUF_SIZE);
-			if LBytesRead = 0 then
-				Break;
+			LUserOffset := FindByteMarker(LStream, '"role"', LSearchFrom);
+			if LUserOffset < 0 then
+				Exit;
 
-			for I := 0 to LBytesRead - Length(LRoleMarker) do
+			// Skip past : and " to get first char
+			while LStream.Position < LStream.Size do
 			begin
-				if CompareMem(@LBuf[I], @LRoleMarker[1], Length(LRoleMarker)) then
-				begin
-					LStream.Position := LFilePos + I + Length(LRoleMarker);
-					// Skip past : and " to get first char
-					while LStream.Position < LStream.Size do
-					begin
-						LStream.ReadBuffer(LByte, 1);
-						if LByte = Ord('"') then
-							Break;
-					end;
-					if LStream.Position < LStream.Size then
-					begin
-						LStream.ReadBuffer(LByte, 1);
-						if LByte = Ord('u') then
-						begin
-							LUserOffset := LFilePos + I;
-							Break;
-						end;
-					end;
-				end;
+				LStream.ReadBuffer(LByte, 1);
+				if LByte = Ord('"') then
+					Break;
 			end;
-
-			if LUserOffset >= 0 then
-				Break;
-
-			if LBytesRead < Length(LRoleMarker) then
-				Break;
-
-			Inc(LFilePos, LBytesRead - LOverlap);
+			if LStream.Position < LStream.Size then
+			begin
+				LStream.ReadBuffer(LByte, 1);
+				if LByte = Ord('u') then
+					Break; // found user role
+			end;
+			LSearchFrom := LStream.Position;
 		end;
-
-		if LUserOffset < 0 then
-			Exit;
 
 		// Phase 2: search backward from user "role" offset for "text" key
 		// Search in the region before the role marker (up to 4KB back)
+		SetLength(LBuf, THUMB_SEARCH_BUF_SIZE);
 		LFilePos := Max(0, LUserOffset - 4096);
 		LStream.Position := LFilePos;
 		LBytesRead := LStream.Read(LBuf[0], Min(THUMB_SEARCH_BUF_SIZE, LUserOffset - LFilePos));
