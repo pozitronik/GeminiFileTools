@@ -52,6 +52,8 @@ type
 		FParser: IGeminiFileParser;
 		FExtractor: IGeminiResourceExtractor;
 		FFilePath: string;
+		FCachedResources: TArray<GeminiFile.Model.TGeminiResource>;
+		FResourcesCached: Boolean;
 		/// <summary>
 		///   Walks all chunks/parts, replacing placeholder resources with lazy variants.
 		/// </summary>
@@ -61,6 +63,8 @@ type
 		///   Returns nil if the resource is not a placeholder.
 		/// </summary>
 		function ConvertToLazyIfNeeded(AResource: GeminiFile.Model.TGeminiResource; const ALocations: TArray<TBase64Location>): GeminiFile.Model.TGeminiResource;
+		/// <summary>Populates FCachedResources if not already cached.</summary>
+		procedure EnsureResourcesCached;
 	public
 		/// <summary>
 		///   Creates a TGeminiFile with default parser and extractor implementations.
@@ -163,6 +167,7 @@ begin
 	if not FileExists(AFileName) then
 		raise EFileNotFoundException.CreateFmt('File not found: %s', [AFileName]);
 	FFilePath := AFileName;
+	FResourcesCached := False;
 
 	// Read raw bytes
 	LFileStream := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
@@ -194,6 +199,7 @@ end;
 procedure TGeminiFile.LoadFromStream(AStream: TStream);
 begin
 	FFilePath := '';
+	FResourcesCached := False;
 	FSystemInstruction := FParser.Parse(AStream, FRunSettings, FChunks);
 end;
 
@@ -244,32 +250,36 @@ begin
 	end;
 end;
 
-function TGeminiFile.GetResources: TArray<GeminiFile.Model.TGeminiResource>;
+procedure TGeminiFile.EnsureResourcesCached;
 var
 	LList: TList<GeminiFile.Model.TGeminiResource>;
 	LChunk: GeminiFile.Model.TGeminiChunk;
 	LRes: GeminiFile.Model.TGeminiResource;
 begin
+	if FResourcesCached then
+		Exit;
 	LList := TList<GeminiFile.Model.TGeminiResource>.Create;
 	try
 		for LChunk in FChunks do
 			if LChunk.TryGetResource(LRes) then
 				LList.Add(LRes);
-		Result := LList.ToArray;
+		FCachedResources := LList.ToArray;
 	finally
 		LList.Free;
 	end;
+	FResourcesCached := True;
+end;
+
+function TGeminiFile.GetResources: TArray<GeminiFile.Model.TGeminiResource>;
+begin
+	EnsureResourcesCached;
+	Result := FCachedResources;
 end;
 
 function TGeminiFile.GetResourceCount: Integer;
-var
-	LChunk: GeminiFile.Model.TGeminiChunk;
-	LRes: GeminiFile.Model.TGeminiResource;
 begin
-	Result := 0;
-	for LChunk in FChunks do
-		if LChunk.TryGetResource(LRes) then
-			Inc(Result);
+	EnsureResourcesCached;
+	Result := Length(FCachedResources);
 end;
 
 function TGeminiFile.ExtractAllResources(const AOutputDir: string; AThreaded: Boolean; const ANamePrefix: string): Integer;
