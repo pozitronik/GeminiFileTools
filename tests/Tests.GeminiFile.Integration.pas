@@ -74,6 +74,22 @@ type
     procedure OnExtractProgress_InvokedDuringExtraction;
     [Test]
     procedure LoadFromFile_EmptyJson_ParsesMinimalFile;
+    [Test]
+    procedure LoadFromStream_InvalidJson_RaisesException;
+    [Test]
+    procedure LoadFromStream_RunSettings_Parsed;
+    [Test]
+    procedure LoadFromStream_IsThoughtChunk_Detected;
+    [Test]
+    procedure LoadFromStream_ChunkWithParts_Parsed;
+    [Test]
+    procedure GetResources_NoResources_ReturnsEmptyArray;
+    [Test]
+    procedure GetResourceCount_NoResources_ReturnsZero;
+    [Test]
+    procedure LoadFromFile_LargeFileWithResources_LazyLoadWorks;
+    [Test]
+    procedure ExtractAllResources_CustomPrefix_UsesPrefix;
   end;
 
 implementation
@@ -565,6 +581,197 @@ begin
   finally
     if TFile.Exists(LTempFile) then
       TFile.Delete(LTempFile);
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_InvalidJson_RaisesException;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LFile: TGeminiFile;
+      LStream: TStringStream;
+    begin
+      LFile := TGeminiFile.Create;
+      try
+        LStream := TStringStream.Create('this is not valid json at all', TEncoding.UTF8);
+        try
+          LFile.LoadFromStream(LStream);
+        finally
+          LStream.Free;
+        end;
+      finally
+        LFile.Free;
+      end;
+    end,
+    EGeminiParseError, '');
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_RunSettings_Parsed;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+begin
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"runSettings":{"model":"models/gemini-2.0-flash","temperature":0.75},' +
+      '"chunkedPrompt":{"chunks":[]}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual('models/gemini-2.0-flash', LFile.RunSettings.Model);
+    Assert.AreEqual(Double(0.75), LFile.RunSettings.Temperature, 0.001);
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_IsThoughtChunk_Detected;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+begin
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[' +
+      '{"text":"hello","role":"user"},' +
+      '{"text":"thinking...","role":"model","isThought":true},' +
+      '{"text":"answer","role":"model"}' +
+      ']}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual<Integer>(3, LFile.ChunkCount);
+    Assert.IsTrue(LFile.Chunks[1].IsThought, 'Second chunk should be a thought');
+    Assert.IsFalse(LFile.Chunks[0].IsThought, 'First chunk should not be a thought');
+    Assert.IsFalse(LFile.Chunks[2].IsThought, 'Third chunk should not be a thought');
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_ChunkWithParts_Parsed;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+begin
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[' +
+      '{"text":"q","role":"user","parts":[' +
+      '{"text":"part one"},{"text":"part two"}' +
+      ']}]}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual<Integer>(1, LFile.ChunkCount);
+    Assert.AreEqual<Integer>(2, LFile.Chunks[0].Parts.Count, 'Chunk should have 2 parts');
+    Assert.AreEqual('part one', LFile.Chunks[0].Parts[0].Text);
+    Assert.AreEqual('part two', LFile.Chunks[0].Parts[1].Text);
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.GetResources_NoResources_ReturnsEmptyArray;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+  LResources: TArray<TGeminiResource>;
+begin
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[' +
+      '{"text":"hello","role":"user"},{"text":"hi","role":"model"}' +
+      ']}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    LResources := LFile.GetResources;
+    Assert.AreEqual<Integer>(0, Length(LResources), 'Plain conversation should have no resources');
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.GetResourceCount_NoResources_ReturnsZero;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+begin
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[{"text":"hello","role":"user"}]}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual<Integer>(0, LFile.GetResourceCount);
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromFile_LargeFileWithResources_LazyLoadWorks;
+var
+  LFile: TGeminiFile;
+  LPath: string;
+  LResources: TArray<TGeminiResource>;
+begin
+  // Uses a real example file with embedded images to exercise the lazy loading path
+  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  if LPath = '' then
+    Exit;
+
+  LFile := TGeminiFile.Create;
+  try
+    LFile.LoadFromFile(LPath);
+    LResources := LFile.GetResources;
+    Assert.AreEqual<Integer>(4, Length(LResources), 'Should find 4 lazy resources');
+    // Verify lazy resources can decode -- accessing Base64Data triggers lazy load
+    Assert.IsTrue(Length(LResources[0].Base64Data) > 0, 'Lazy resource should decode on access');
+  finally
+    LFile.Free;
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.ExtractAllResources_CustomPrefix_UsesPrefix;
+var
+  LFile: TGeminiFile;
+  LPath, LOutDir: string;
+  LCount: Integer;
+begin
+  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  if LPath = '' then
+    Exit;
+
+  LOutDir := TPath.Combine(TPath.GetTempPath, 'GemViewTest_Prefix_' + TGUID.NewGuid.ToString);
+  LFile := TGeminiFile.Create;
+  try
+    LFile.LoadFromFile(LPath);
+    LCount := LFile.ExtractAllResources(LOutDir, False, 'img');
+    Assert.AreEqual<Integer>(4, LCount);
+    // Check that extracted files use the custom prefix
+    Assert.IsTrue(TFile.Exists(TPath.Combine(LOutDir, 'img_000.jpg')),
+      'Extracted file should use custom prefix "img"');
+  finally
+    LFile.Free;
+    if TDirectory.Exists(LOutDir) then
+      TDirectory.Delete(LOutDir, True);
   end;
 end;
 

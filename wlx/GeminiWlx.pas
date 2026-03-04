@@ -133,6 +133,31 @@ function ScanRoleMarkers(const AFileName: string; out AFileSize: Int64): TArray<
 /// </summary>
 function ExtractFirstUserText(const AFileName: string; AMaxChars: Integer = 200): string;
 
+/// <summary>
+///   Fast binary search for the first embedded image in a Gemini file.
+///   Locates "inlineImage" marker, extracts the base64 "data" field.
+///   No JSON parsing. Returns True if base64 data was found.
+/// </summary>
+function FindFirstImageBase64(const AFileName: string; out ABase64: TBytes): Boolean;
+
+/// <summary>
+///   Renders a stripe thumbnail showing conversation structure as horizontal bars.
+///   Returns 0 if file has no role markers.
+/// </summary>
+function RenderStripeThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+
+/// <summary>
+///   Renders a text excerpt thumbnail with "User:" label and first user message.
+///   Returns 0 if no user text found.
+/// </summary>
+function RenderTextExcerptThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+
+/// <summary>
+///   Renders a metadata badge thumbnail with model name and statistics.
+///   Uses full JSON parsing. Returns 0 on failure.
+/// </summary>
+function RenderMetadataThumbnail(const AFileName: string; AWidth, AHeight: Integer): HBITMAP;
+
 // --- Exported WLX functions ---
 
 // Unicode (primary)

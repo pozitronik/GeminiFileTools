@@ -184,6 +184,14 @@ type
 		procedure CanYouHandleThisFileW_ZeroBytesRead_ReturnsFalse;
 		[Test]
 		procedure OpenArchiveW_MalformedJson_SetsBadData;
+		[Test]
+		procedure CanYouHandleThisFileW_OneByte_ReturnsFalse;
+		[Test]
+		procedure CanYouHandleThisFileW_TwoBytes_ReturnsFalse;
+		[Test]
+		procedure CanYouHandleThisFileW_MarkerAtBufferEnd_ReturnsTrue;
+		[Test]
+		procedure ProcessFileW_UnknownOperation_ExtractsFile;
 	end;
 
 	/// <summary>
@@ -1370,6 +1378,75 @@ begin
 	Assert.AreEqual<THandle>(0, LHandle, 'Handle should be 0 for malformed file');
 	// Should set OpenResult to E_BAD_DATA or E_BAD_ARCHIVE
 	Assert.IsTrue(LData.OpenResult <> 0, 'OpenResult should be non-zero for malformed JSON');
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_OneByte_ReturnsFalse;
+var
+	LPath: string;
+	LBytes: TBytes;
+begin
+	// File with a single byte (not even a valid BOM start)
+	SetLength(LBytes, 1);
+	LBytes[0] := Ord('A');
+	LPath := CreateTempFileBytes('one_byte.dat', LBytes);
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)),
+		'Single-byte file should not be handled');
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_TwoBytes_ReturnsFalse;
+var
+	LPath: string;
+	LBytes: TBytes;
+begin
+	// File with exactly 2 bytes -- too small for BOM or content
+	SetLength(LBytes, 2);
+	LBytes[0] := Ord('{');
+	LBytes[1] := Ord('}');
+	LPath := CreateTempFileBytes('two_bytes.dat', LBytes);
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)),
+		'Two-byte file should not match (no runSettings marker)');
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_MarkerAtBufferEnd_ReturnsTrue;
+var
+	LPath: string;
+	LPadding: string;
+begin
+	// Place "runSettings" near the end of the 8KB sniff window
+	LPadding := StringOfChar(' ', 8100);
+	LPath := CreateTempFile('marker_end.json',
+		'{' + LPadding + '"runSettings":{}}');
+	// The marker is within the 8KB sniff buffer, should be found
+	Assert.IsTrue(CanYouHandleThisFileW(PWideChar(LPath)),
+		'Should find runSettings near buffer boundary');
+end;
+
+procedure TTestGeminiWcxExportedApi.ProcessFileW_UnknownOperation_ExtractsFile;
+var
+	LPath, LOutFile: string;
+	LData: TOpenArchiveDataW;
+	LHeader: THeaderDataExW;
+	LHandle: THandle;
+	LResult: Integer;
+begin
+	LPath := FindExample('Tailscale');
+	if LPath = '' then Exit;
+
+	FillChar(LData, SizeOf(LData), 0);
+	LData.ArcName := PWideChar(LPath);
+	LData.OpenMode := PK_OM_EXTRACT;
+	LHandle := OpenArchiveW(LData);
+	if LHandle = 0 then Exit;
+	try
+		Assert.AreEqual<Integer>(0, ReadHeaderExW(LHandle, LHeader));
+		// Unknown operation code (99) -- falls through to PK_EXTRACT path
+		LOutFile := TPath.Combine(FTempDir, 'unknown_op.txt');
+		LResult := ProcessFileW(LHandle, 99, nil, PWideChar(LOutFile));
+		// Operations > PK_TEST fall through to extract code
+		Assert.AreEqual<Integer>(0, LResult);
+	finally
+		CloseArchive(LHandle);
+	end;
 end;
 
 // ========================================================================
