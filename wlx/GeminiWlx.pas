@@ -740,23 +740,25 @@ begin
 	if LKind <> COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN then
 		Exit;
 
-	// Let WebView2 handle keys when any modifier is held (Ctrl+C, Ctrl+A, etc.)
-	if (GetKeyState(VK_CONTROL) < 0) or (GetKeyState(VK_MENU) < 0) or (GetKeyState(VK_SHIFT) < 0) then
-		Exit;
-
 	if Failed(args.Get_VirtualKey(LKey)) then
 		Exit;
 
-	// Let WebView2 handle navigation keys (scrolling, page movement)
+	// Navigation keys go to WebView2 (with or without Shift for text selection)
 	case LKey of
-		VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
-		VK_PRIOR, VK_NEXT,  // Page Up / Page Down
-		VK_HOME, VK_END,
-		VK_SPACE, VK_BACK:
+		VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_SPACE, VK_BACK:
 			Exit;
 	end;
 
-	// Forward everything else to TC parent so lister hotkeys work (Esc, N, P, etc.)
+	// Ctrl+clipboard shortcuts go to WebView2
+	if GetKeyState(VK_CONTROL) < 0 then
+		case LKey of
+			Ord('C'), Ord('A'), Ord('V'), Ord('X'):
+				Exit;
+		end;
+
+	// Forward non-character keys to TC (Esc, F-keys, modifier combos).
+	// Note: character keys (letters, numbers, Tab) bypass AcceleratorKeyPressed
+	// entirely and are consumed by WebView2 — this is a WebView2 limitation.
 	args.Set_Handled(1);
 	PostMessage(FParentWin, WM_KEYDOWN, LKey, 0);
 end;
@@ -1318,7 +1320,7 @@ var
 	LTextBytes: TBytesStream;
 	LRawText: UTF8String;
 	LRESULT: string;
-	LHexBuf: array[0..3] of Byte;
+	LHexBuf: array [0 .. 3] of Byte;
 	LCodePoint: Integer;
 	LUtf8: UTF8String;
 begin
@@ -1425,12 +1427,18 @@ begin
 						Break;
 					LStream.ReadBuffer(LByte, 1);
 					case Chr(LByte) of
-						'n': LByte := Ord(#10);
-						'r': LByte := Ord(#13);
-						't': LByte := Ord(#9);
-						'b': LByte := Ord(#8);
-						'f': LByte := Ord(#12);
-						'\', '"', '/': ; // LByte already holds the literal character
+						'n':
+							LByte := Ord(#10);
+						'r':
+							LByte := Ord(#13);
+						't':
+							LByte := Ord(#9);
+						'b':
+							LByte := Ord(#8);
+						'f':
+							LByte := Ord(#12);
+						'\', '"', '/':
+							; // LByte already holds the literal character
 						'u':
 							begin
 								// \uXXXX Unicode escape
@@ -1445,8 +1453,8 @@ begin
 								end;
 								Continue; // already written, skip the WriteBuffer below
 							end;
-					else
-						// Unknown escape -- preserve the escaped character only
+						else
+							// Unknown escape -- preserve the escaped character only
 					end;
 				end;
 				LTextBytes.WriteBuffer(LByte, 1);

@@ -210,7 +210,7 @@ The WLX plugin renders Gemini conversation files as formatted HTML directly in T
 - Renders conversations as styled HTML with embedded images, thinking blocks, and interactive controls
 - Thumbnail previews in Total Commander's thumbnail view — embedded images are used when available; for text-only files, a configurable fallback strategy generates a visual thumbnail
 - In-page text search via Total Commander's search dialog
-- Keyboard transparency — unmodified keys (Esc, N, P, and other TC hotkeys) pass through to Total Commander even when the viewer has focus; modifier combinations (Ctrl+C, Ctrl+A, Ctrl+scroll zoom) are handled by WebView2
+- Keyboard transparency — non-character keys (Esc, F-keys) and modifier combinations pass through to Total Commander; navigation keys (arrows, Page Up/Down, Home/End, Space) scroll the content; Ctrl+C/A/V/X are handled by WebView2. **Limitation:** character keys without modifiers (letters, numbers, Tab) are consumed by WebView2 and do not reach TC hotkeys — click inside the TC file panel first to restore TC keyboard control
 - Custom CSS override support (same selectors as the WCX HTML output)
 
 ### Requirements
