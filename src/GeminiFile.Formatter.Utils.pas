@@ -51,9 +51,14 @@ begin
 		AStream.WriteBuffer(LBytes[0], Length(LBytes));
 end;
 
+const
+	/// <summary>Pre-encoded CRLF bytes to avoid per-call encoding overhead.</summary>
+	CRLF_BYTES: array[0..1] of Byte = (13, 10);
+
 procedure StreamWriteLn(AStream: TStream; const AStr: string);
 begin
-	StreamWrite(AStream, AStr + CRLF);
+	StreamWrite(AStream, AStr);
+	AStream.WriteBuffer(CRLF_BYTES[0], 2);
 end;
 
 function ThinkingSummarySuffix(ACreateTime: TDateTime; AAnyResource: Boolean): string;
