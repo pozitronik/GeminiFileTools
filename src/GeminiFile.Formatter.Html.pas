@@ -72,11 +72,68 @@ uses
 	GeminiFile.Markdown;
 
 const
-	CSS_STYLES = '* { box-sizing: border-box; }' + CRLF + 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' + ' max-width: 900px; margin: 0 auto; padding: 20px; background: #fafafa; color: #333; line-height: 1.6; }' + CRLF + 'h1 { margin: 0 0 10px; }' + CRLF + '.meta { color: #666; font-size: 0.9em; margin-bottom: 20px; }' + CRLF + '.section-title { font-size: 1.2em; font-weight: bold; margin: 20px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }' + CRLF + '.system-instruction { background: #fff8e1; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 10px 0 20px; white-space: pre-wrap; word-wrap: break-word; }' + CRLF + 'hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }' + CRLF +
-		'.message { margin: 12px 0; padding: 12px 16px; border-radius: 8px; }' + CRLF + '.user { background: #e3f2fd; border-left: 4px solid #1976d2; }' + CRLF + '.model { background: #fff; border-left: 4px solid #388e3c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }' + CRLF + '.role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; margin-bottom: 6px; }' + CRLF + '.user .role { color: #1976d2; }' + CRLF + '.model .role { color: #388e3c; }' + CRLF + '.tokens { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF + '.content { white-space: pre-wrap; word-wrap: break-word; }' + CRLF + 'details { margin: 8px 0; background: #f5f5f5; border-radius: 4px; padding: 8px 12px; }' + CRLF + 'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF +
-		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF + '.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF + '.remote-attachments { color: #888; font-size: 0.85em; font-style: italic; margin: 4px 0; }' + CRLF + '.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF + 'body.full-width { max-width: none; }' + CRLF + '#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' + ' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' + ' display: flex; gap: 6px; }' + CRLF + '#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' + ' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' +
-		CRLF + '#controls button:hover { background: #e0e0e0; }' + CRLF + 'body.md .content { white-space: normal; }' + CRLF + 'body.md .content p { margin: 0.4em 0; }' + CRLF + 'body.md .content p:first-child { margin-top: 0; }' + CRLF + 'body.md .content p:last-child { margin-bottom: 0; }' + CRLF + 'body.md .content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px;' + ' border-radius: 6px; overflow-x: auto; white-space: pre; font-family: Consolas, Monaco, monospace;' + ' margin: 8px 0; line-height: 1.4; }' + CRLF + 'body.md .content pre code { background: none; padding: 0; border-radius: 0; color: inherit; }' + CRLF + 'body.md .content code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px;' + ' font-family: Consolas, Monaco, monospace; font-size: 0.9em; }' + CRLF +
-		'.combined-part { border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 8px; }' + CRLF + '.combined-part:first-child { border-top: none; padding-top: 0; margin-top: 0; }';
+	/// Page layout: reset, body, headings, meta, system instruction, separator
+	CSS_BASE =
+		'* { box-sizing: border-box; }' + CRLF +
+		'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' +
+		' max-width: 900px; margin: 0 auto; padding: 20px; background: #fafafa; color: #333; line-height: 1.6; }' + CRLF +
+		'h1 { margin: 0 0 10px; }' + CRLF +
+		'.meta { color: #666; font-size: 0.9em; margin-bottom: 20px; }' + CRLF +
+		'.section-title { font-size: 1.2em; font-weight: bold; margin: 20px 0 10px;' +
+		' border-bottom: 1px solid #ddd; padding-bottom: 5px; }' + CRLF +
+		'.system-instruction { background: #fff8e1; border-left: 4px solid #ffc107;' +
+		' padding: 12px 16px; margin: 10px 0 20px; white-space: pre-wrap; word-wrap: break-word; }' + CRLF +
+		'hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }' + CRLF;
+
+	/// Message bubbles: user/model blocks, role labels, tokens, content, thinking
+	CSS_MESSAGES =
+		'.message { margin: 12px 0; padding: 12px 16px; border-radius: 8px; }' + CRLF +
+		'.user { background: #e3f2fd; border-left: 4px solid #1976d2; }' + CRLF +
+		'.model { background: #fff; border-left: 4px solid #388e3c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }' + CRLF +
+		'.role { font-weight: bold; font-size: 0.85em; text-transform: uppercase; margin-bottom: 6px; }' + CRLF +
+		'.user .role { color: #1976d2; }' + CRLF +
+		'.model .role { color: #388e3c; }' + CRLF +
+		'.tokens { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
+		'.content { white-space: pre-wrap; word-wrap: break-word; }' + CRLF +
+		'.time { color: #999; font-weight: normal; font-size: 0.85em; }' + CRLF +
+		'details { margin: 8px 0; background: #f5f5f5; border-radius: 4px; padding: 8px 12px; }' + CRLF +
+		'summary { cursor: pointer; color: #666; font-style: italic; }' + CRLF;
+
+	/// Embedded images, resource info, remote attachment hints
+	CSS_RESOURCES =
+		'.resource-img { max-width: 100%; height: auto; margin: 8px 0; border-radius: 4px; }' + CRLF +
+		'.resource-info { color: #888; font-size: 0.85em; margin: 4px 0; }' + CRLF +
+		'.remote-attachments { color: #888; font-size: 0.85em; font-style: italic; margin: 4px 0; }' + CRLF;
+
+	/// Fixed control panel: full-width toggle and buttons
+	CSS_CONTROLS =
+		'body.full-width { max-width: none; }' + CRLF +
+		'#controls { position: fixed; top: 10px; right: 10px; background: #fff; border: 1px solid #ddd;' +
+		' border-radius: 8px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000;' +
+		' display: flex; gap: 6px; }' + CRLF +
+		'#controls button { background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;' +
+		' padding: 4px 8px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }' + CRLF +
+		'#controls button:hover { background: #e0e0e0; }' + CRLF;
+
+	/// Markdown rendering mode: paragraphs, code blocks, inline code
+	CSS_MARKDOWN =
+		'body.md .content { white-space: normal; }' + CRLF +
+		'body.md .content p { margin: 0.4em 0; }' + CRLF +
+		'body.md .content p:first-child { margin-top: 0; }' + CRLF +
+		'body.md .content p:last-child { margin-bottom: 0; }' + CRLF +
+		'body.md .content pre { background: #1e1e1e; color: #d4d4d4; padding: 12px 16px;' +
+		' border-radius: 6px; overflow-x: auto; white-space: pre; font-family: Consolas, Monaco, monospace;' +
+		' margin: 8px 0; line-height: 1.4; }' + CRLF +
+		'body.md .content pre code { background: none; padding: 0; border-radius: 0; color: inherit; }' + CRLF +
+		'body.md .content code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px;' +
+		' font-family: Consolas, Monaco, monospace; font-size: 0.9em; }' + CRLF;
+
+	/// Combined sub-blocks within a single message
+	CSS_COMBINED =
+		'.combined-part { border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 8px; }' + CRLF +
+		'.combined-part:first-child { border-top: none; padding-top: 0; margin-top: 0; }';
+
+	CSS_STYLES = CSS_BASE + CSS_MESSAGES + CSS_RESOURCES + CSS_CONTROLS + CSS_MARKDOWN + CSS_COMBINED;
 
 	{TGeminiHtmlFormatter}
 
