@@ -40,7 +40,10 @@ uses
   Tests.GeminiWcx in 'Tests.GeminiWcx.pas',
   Tests.GeminiFile.Grouping in 'Tests.GeminiFile.Grouping.pas',
   Tests.GeminiFile.LazyData in 'Tests.GeminiFile.LazyData.pas',
-  Tests.GeminiFile.TestUtils in 'Tests.GeminiFile.TestUtils.pas';
+  Tests.GeminiFile.TestUtils in 'Tests.GeminiFile.TestUtils.pas',
+  WlxApi in '..\wlx\WlxApi.pas',
+  GeminiWlx in '..\wlx\GeminiWlx.pas',
+  Tests.GeminiWlx in 'Tests.GeminiWlx.pas';
 
 var
   LRunner: ITestRunner;

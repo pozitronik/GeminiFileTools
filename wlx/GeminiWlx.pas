@@ -104,7 +104,34 @@ type
 		function Invoke(const sender: ICoreWebView2Controller; const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
 	end;
 
+	/// <summary>
+	///   Records a conversation role marker found during binary file scan.
+	///   Used by the stripe thumbnail strategy to visualize conversation structure.
+	/// </summary>
+	TRoleMarker = record
+		Role: Byte; // 0 = user, 1 = model
+		ByteOffset: Int64; // position in file
+	end;
+
 function GetListerConfig: TListerConfig;
+
+// --- Thumbnail helpers (public for testability) ---
+
+/// <summary>
+///   Binary scan for "role" markers in a Gemini file.
+///   For each marker, reads ahead past : and " to determine user vs model.
+///   Returns array of role markers with byte offsets. No JSON parsing.
+///   Also returns the file size to avoid a redundant file open by the caller.
+/// </summary>
+function ScanRoleMarkers(const AFileName: string; out AFileSize: Int64): TArray<TRoleMarker>;
+
+/// <summary>
+///   Extracts the first user message text via binary scan.
+///   Finds first "role" with value starting with 'u', then searches backward
+///   for "text" (which precedes "role" in chunk objects), reads the JSON string value.
+///   Decodes JSON escapes and converts UTF-8 to string.
+/// </summary>
+function ExtractFirstUserText(const AFileName: string; AMaxChars: Integer = 200): string;
 
 // --- Exported WLX functions ---
 
@@ -164,15 +191,6 @@ type
 	///   exported by WebView2Loader.dll.
 	/// </summary>
 	TCreateCoreWebView2EnvironmentWithOptionsFunc = function(browserExecutableFolder: LPCWSTR; UserDataFolder: LPCWSTR; const environmentOptions: ICoreWebView2EnvironmentOptions; const environmentCreatedHandler: ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler): HResult; stdcall;
-
-	/// <summary>
-	///   Records a conversation role marker found during binary file scan.
-	///   Used by the stripe thumbnail strategy to visualize conversation structure.
-	/// </summary>
-	TRoleMarker = record
-		Role: Byte; // 0 = user, 1 = model
-		ByteOffset: Int64; // position in file
-	end;
 
 var
 	GClassRegistered: Boolean;
@@ -1098,12 +1116,6 @@ begin
 	DeleteObject(LBrush);
 end;
 
-/// <summary>
-///   Binary scan for "role" markers in a Gemini file.
-///   For each marker, reads ahead past : and " to determine user vs model.
-///   Returns array of role markers with byte offsets. No JSON parsing.
-///   Also returns the file size to avoid a redundant file open by the caller.
-/// </summary>
 function ScanRoleMarkers(const AFileName: string; out AFileSize: Int64): TArray<TRoleMarker>;
 var
 	LStream: TFileStream;
@@ -1258,12 +1270,6 @@ begin
 	end;
 end;
 
-/// <summary>
-///   Extracts the first user message text via binary scan.
-///   Finds first "role" with value starting with 'u', then searches backward
-///   for "text" (which precedes "role" in chunk objects), reads the JSON string value.
-///   Decodes JSON escapes and converts UTF-8 to string.
-/// </summary>
 function ExtractFirstUserText(const AFileName: string; AMaxChars: Integer = 200): string;
 var
 	LStream: TFileStream;

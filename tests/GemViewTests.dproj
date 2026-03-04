@@ -104,6 +104,9 @@
         <DCCReference Include="Tests.GeminiWcx.pas"/>
         <DCCReference Include="Tests.GeminiFile.LazyData.pas"/>
         <DCCReference Include="Tests.GeminiFile.TestUtils.pas"/>
+        <DCCReference Include="..\wlx\WlxApi.pas"/>
+        <DCCReference Include="..\wlx\GeminiWlx.pas"/>
+        <DCCReference Include="Tests.GeminiWlx.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
