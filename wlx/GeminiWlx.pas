@@ -161,6 +161,12 @@ function RenderMetadataThumbnail(const AFileName: string; AWidth, AHeight: Integ
 // --- Exported WLX functions ---
 
 // Unicode (primary)
+/// <summary>
+///   Escapes a string for safe embedding in a JavaScript double-quoted string literal.
+///   Handles backslashes, quotes, newlines, tabs, and Unicode line terminators.
+/// </summary>
+function JsEscapeString(const AStr: string): string;
+
 function ListLoadW(ParentWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): HWND; stdcall;
 function ListLoadNextW(ParentWin: HWND; ListWin: HWND; FileToLoad: PWideChar; ShowFlags: Integer): Integer; stdcall;
 function ListSearchTextW(ListWin: HWND; SearchString: PWideChar; SearchParameter: Integer): Integer; stdcall;
@@ -813,6 +819,40 @@ begin
 	end;
 end;
 
+function JsEscapeString(const AStr: string): string;
+var
+	LSB: TStringBuilder;
+	I: Integer;
+	LCh: Char;
+begin
+	if AStr = '' then
+		Exit('');
+
+	LSB := TStringBuilder.Create(Length(AStr) + Length(AStr) div 4);
+	try
+		for I := 1 to Length(AStr) do
+		begin
+			LCh := AStr[I];
+			case LCh of
+				'\': LSB.Append('\\');
+				'"': LSB.Append('\"');
+				#8:  LSB.Append('\b');
+				#9:  LSB.Append('\t');
+				#10: LSB.Append('\n');
+				#12: LSB.Append('\f');
+				#13: LSB.Append('\r');
+				#$2028: LSB.Append('\u2028');
+				#$2029: LSB.Append('\u2029');
+			else
+				LSB.Append(LCh);
+			end;
+		end;
+		Result := LSB.ToString;
+	finally
+		LSB.Free;
+	end;
+end;
+
 function ListSearchTextW(ListWin: HWND; SearchString: PWideChar; SearchParameter: Integer): Integer; stdcall;
 var
 	LWindow: TGeminiListerWindow;
@@ -827,8 +867,10 @@ begin
 	LCaseSensitive := (SearchParameter and lcs_matchcase) <> 0;
 	LBackwards := (SearchParameter and lcs_backwards) <> 0;
 
-	// Use window.find() for in-page search
-	LScript := Format('window.find("%s", %s, %s, false, false, false, false)', [StringReplace(StringReplace(string(SearchString), '\', '\\', [rfReplaceAll]), '"', '\"', [rfReplaceAll]), LowerCase(BoolToStr(LCaseSensitive, True)), LowerCase(BoolToStr(LBackwards, True))]);
+	LScript := Format('window.find("%s", %s, %s, false, false, false, false)', [
+		JsEscapeString(string(SearchString)),
+		LowerCase(BoolToStr(LCaseSensitive, True)),
+		LowerCase(BoolToStr(LBackwards, True))]);
 
 	LWindow.FWebView.ExecuteScript(PWideChar(LScript), nil);
 	Result := LISTPLUGIN_OK;

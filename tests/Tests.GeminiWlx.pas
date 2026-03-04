@@ -277,6 +277,38 @@ type
 		procedure ListGetPreviewBitmapW_MetadataFallback_ReturnsNonZero;
 	end;
 
+	/// <summary>
+	///   Tests for JsEscapeString: JavaScript string literal escaping.
+	/// </summary>
+	[TestFixture]
+	TTestWlxJsEscapeString = class
+	public
+		[Test]
+		procedure EmptyString_ReturnsEmpty;
+		[Test]
+		procedure PlainText_Unchanged;
+		[Test]
+		procedure Backslash_Escaped;
+		[Test]
+		procedure DoubleQuote_Escaped;
+		[Test]
+		procedure Newline_Escaped;
+		[Test]
+		procedure CarriageReturn_Escaped;
+		[Test]
+		procedure Tab_Escaped;
+		[Test]
+		procedure Backspace_Escaped;
+		[Test]
+		procedure FormFeed_Escaped;
+		[Test]
+		procedure LineSeparator_U2028_Escaped;
+		[Test]
+		procedure ParagraphSeparator_U2029_Escaped;
+		[Test]
+		procedure MixedSpecialChars_AllEscaped;
+	end;
+
 implementation
 
 uses
@@ -1456,6 +1488,71 @@ begin
 	end;
 end;
 
+// ========================================================================
+// TTestWlxJsEscapeString
+// ========================================================================
+
+procedure TTestWlxJsEscapeString.EmptyString_ReturnsEmpty;
+begin
+	Assert.AreEqual('', JsEscapeString(''));
+end;
+
+procedure TTestWlxJsEscapeString.PlainText_Unchanged;
+begin
+	Assert.AreEqual('hello world 123', JsEscapeString('hello world 123'));
+end;
+
+procedure TTestWlxJsEscapeString.Backslash_Escaped;
+begin
+	Assert.AreEqual('a\\b', JsEscapeString('a\b'));
+end;
+
+procedure TTestWlxJsEscapeString.DoubleQuote_Escaped;
+begin
+	Assert.AreEqual('say \"hi\"', JsEscapeString('say "hi"'));
+end;
+
+procedure TTestWlxJsEscapeString.Newline_Escaped;
+begin
+	Assert.AreEqual('line1\nline2', JsEscapeString('line1' + #10 + 'line2'));
+end;
+
+procedure TTestWlxJsEscapeString.CarriageReturn_Escaped;
+begin
+	Assert.AreEqual('a\rb', JsEscapeString('a' + #13 + 'b'));
+end;
+
+procedure TTestWlxJsEscapeString.Tab_Escaped;
+begin
+	Assert.AreEqual('col1\tcol2', JsEscapeString('col1' + #9 + 'col2'));
+end;
+
+procedure TTestWlxJsEscapeString.Backspace_Escaped;
+begin
+	Assert.AreEqual('x\by', JsEscapeString('x' + #8 + 'y'));
+end;
+
+procedure TTestWlxJsEscapeString.FormFeed_Escaped;
+begin
+	Assert.AreEqual('a\fb', JsEscapeString('a' + #12 + 'b'));
+end;
+
+procedure TTestWlxJsEscapeString.LineSeparator_U2028_Escaped;
+begin
+	Assert.AreEqual('a\u2028b', JsEscapeString('a' + #$2028 + 'b'));
+end;
+
+procedure TTestWlxJsEscapeString.ParagraphSeparator_U2029_Escaped;
+begin
+	Assert.AreEqual('a\u2029b', JsEscapeString('a' + #$2029 + 'b'));
+end;
+
+procedure TTestWlxJsEscapeString.MixedSpecialChars_AllEscaped;
+begin
+	// Backslash + quote + newline + tab in one string
+	Assert.AreEqual('\\\"\n\t', JsEscapeString('\"' + #10 + #9));
+end;
+
 initialization
 	TDUnitX.RegisterTestFixture(TTestWlxScanRoleMarkers);
 	TDUnitX.RegisterTestFixture(TTestWlxExtractFirstUserText);
@@ -1464,5 +1561,6 @@ initialization
 	TDUnitX.RegisterTestFixture(TTestWlxFindFirstImageBase64);
 	TDUnitX.RegisterTestFixture(TTestWlxRenderFunctions);
 	TDUnitX.RegisterTestFixture(TTestWlxExportedFunctions);
+	TDUnitX.RegisterTestFixture(TTestWlxJsEscapeString);
 
 end.
