@@ -174,6 +174,16 @@ type
 		procedure CanYouHandleThisFileW_PartialBom_ReturnsFalse;
 		[Test]
 		procedure ProcessCurrentFile_AfterExhaustion_ReturnsEndArchive;
+		[Test]
+		procedure ProcessFileW_ExtractBothPathsNil_ReturnsECreate;
+		[Test]
+		procedure CanYouHandleThisFileW_WhitespaceOnly_ReturnsFalse;
+		[Test]
+		procedure CanYouHandleThisFileW_BraceNoMarker_ReturnsFalse;
+		[Test]
+		procedure CanYouHandleThisFileW_ZeroBytesRead_ReturnsFalse;
+		[Test]
+		procedure OpenArchiveW_MalformedJson_SetsBadData;
 	end;
 
 	/// <summary>
@@ -207,6 +217,10 @@ type
 		procedure SetChangeVolProc_Ansi_NoOp;
 		[Test]
 		procedure SetProcessDataProc_Ansi_NoOp;
+		[Test]
+		procedure ProcessFile_Ansi_ExtractBothPathsNil_ReturnsECreate;
+		[Test]
+		procedure OpenArchive_Ansi_NonExistent_SetsEOpen;
 	end;
 
 	/// <summary>
@@ -1283,6 +1297,81 @@ begin
 	end;
 end;
 
+procedure TTestGeminiWcxExportedApi.ProcessFileW_ExtractBothPathsNil_ReturnsECreate;
+var
+	LPath: string;
+	LData: TOpenArchiveDataW;
+	LHeader: THeaderDataExW;
+	LHandle: THandle;
+	LResult: Integer;
+begin
+	LPath := FindExample('Tailscale');
+	if LPath = '' then Exit;
+
+	FillChar(LData, SizeOf(LData), 0);
+	LData.ArcName := PWideChar(LPath);
+	LData.OpenMode := PK_OM_EXTRACT;
+	LHandle := OpenArchiveW(LData);
+	if LHandle = 0 then Exit;
+	try
+		Assert.AreEqual<Integer>(0, ReadHeaderExW(LHandle, LHeader));
+		// PK_EXTRACT with both paths nil -> E_ECREATE
+		LResult := ProcessFileW(LHandle, PK_EXTRACT, nil, nil);
+		Assert.AreEqual<Integer>(E_ECREATE, LResult,
+			'Should return E_ECREATE when both paths are nil');
+	finally
+		CloseArchive(LHandle);
+	end;
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_WhitespaceOnly_ReturnsFalse;
+var
+	LPath: string;
+begin
+	// File with only whitespace and no opening brace
+	LPath := CreateTempFile('whitespace_only.txt', '   '#13#10#9'  ');
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)),
+		'Whitespace-only file should not be handled');
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_BraceNoMarker_ReturnsFalse;
+var
+	LPath: string;
+begin
+	// Valid JSON opening brace but no 'runSettings' marker
+	LPath := CreateTempFile('no_marker.json', '{"someOtherKey": "value"}');
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)),
+		'JSON without runSettings should not be handled');
+end;
+
+procedure TTestGeminiWcxExportedApi.CanYouHandleThisFileW_ZeroBytesRead_ReturnsFalse;
+var
+	LPath: string;
+begin
+	// Single byte file: just the opening brace, no content after
+	LPath := CreateTempFile('just_brace.txt', '{');
+	Assert.IsFalse(CanYouHandleThisFileW(PWideChar(LPath)),
+		'File with only a brace should not be handled');
+end;
+
+procedure TTestGeminiWcxExportedApi.OpenArchiveW_MalformedJson_SetsBadData;
+var
+	LPath: string;
+	LData: TOpenArchiveDataW;
+	LHandle: THandle;
+begin
+	// File that passes sniff check but fails JSON parse with a generic exception
+	LPath := CreateTempFile('malformed.json',
+		'{"runSettings": invalid json content here!!!}');
+	FillChar(LData, SizeOf(LData), 0);
+	LData.ArcName := PWideChar(LPath);
+	LData.OpenMode := PK_OM_LIST;
+	LHandle := OpenArchiveW(LData);
+	Assert.AreEqual<THandle>(0, LHandle, 'Handle should be 0 for malformed file');
+	// Should set OpenResult to E_BAD_DATA or E_BAD_ARCHIVE
+	Assert.IsTrue(LData.OpenResult <> 0, 'OpenResult should be non-zero for malformed JSON');
+end;
+
 // ========================================================================
 // TTestGeminiWcxAnsiCompat
 // ========================================================================
@@ -1468,6 +1557,50 @@ procedure TTestGeminiWcxAnsiCompat.SetProcessDataProc_Ansi_NoOp;
 begin
 	// ANSI callback is a no-op, should not crash
 	SetProcessDataProc(0, nil);
+end;
+
+procedure TTestGeminiWcxAnsiCompat.ProcessFile_Ansi_ExtractBothPathsNil_ReturnsECreate;
+var
+	LPath: string;
+	LData: TOpenArchiveData;
+	LHeader: THeaderData;
+	LHandle: THandle;
+	LAnsiPath: AnsiString;
+	LResult: Integer;
+begin
+	LPath := CreateTempFile('ansi_ecreate.json',
+		'{"runSettings":{},"chunkedPrompt":{"chunks":[{"text":"hi","role":"user"}]}}');
+	LAnsiPath := AnsiString(LPath);
+
+	FillChar(LData, SizeOf(LData), 0);
+	LData.ArcName := PAnsiChar(LAnsiPath);
+	LData.OpenMode := PK_OM_EXTRACT;
+	LHandle := OpenArchive(LData);
+	if LHandle = 0 then Exit;
+	try
+		Assert.AreEqual<Integer>(0, ReadHeader(LHandle, LHeader));
+		// PK_EXTRACT with both paths nil -> E_ECREATE
+		LResult := ProcessFile(LHandle, PK_EXTRACT, nil, nil);
+		Assert.AreEqual<Integer>(E_ECREATE, LResult,
+			'ANSI extract with nil paths should return E_ECREATE');
+	finally
+		CloseArchive(LHandle);
+	end;
+end;
+
+procedure TTestGeminiWcxAnsiCompat.OpenArchive_Ansi_NonExistent_SetsEOpen;
+var
+	LData: TOpenArchiveData;
+	LAnsiPath: AnsiString;
+	LHandle: THandle;
+begin
+	LAnsiPath := AnsiString('C:\nonexistent_file_12345.gemini');
+	FillChar(LData, SizeOf(LData), 0);
+	LData.ArcName := PAnsiChar(LAnsiPath);
+	LData.OpenMode := PK_OM_LIST;
+	LHandle := OpenArchive(LData);
+	Assert.AreEqual<THandle>(0, LHandle, 'Handle should be 0 for non-existent file');
+	Assert.AreEqual<Integer>(E_EOPEN, LData.OpenResult, 'Should set E_EOPEN');
 end;
 
 // ========================================================================
