@@ -38,7 +38,12 @@ function FindExample(const AName: string): string;
 begin
 	Result := TPath.Combine(ExamplesDir, AName);
 	if not FileExists(Result) then
-		Result := '';
+	begin
+		// Example files use '..gemini' extension (double dot before gemini)
+		Result := TPath.Combine(ExamplesDir, AName + '..gemini');
+		if not FileExists(Result) then
+			Result := '';
+	end;
 end;
 
 end.

@@ -230,6 +230,12 @@ type
 		procedure Metadata_InvalidFile_ReturnsZero;
 		[Test]
 		procedure Metadata_NoModelName_StillReturnsNonZero;
+		[Test]
+		procedure Text_SmallDimensions_HitsMinClamps;
+		[Test]
+		procedure Metadata_SmallDimensions_HitsMinClamps;
+		[Test]
+		procedure Stripe_ManyMarkers_SmallHeight_HitsMinBarHeight;
 	end;
 
 	/// <summary>
@@ -263,13 +269,20 @@ type
 		procedure ListLoadNextW_InvalidWindow_ReturnsError;
 		[Test]
 		procedure ListSearchTextW_InvalidWindow_ReturnsError;
+		[Test]
+		procedure ListGetPreviewBitmapW_FileWithImage_ReturnsNonZero;
+		[Test]
+		procedure ListGetPreviewBitmapW_StripeFallback_ReturnsNonZero;
+		[Test]
+		procedure ListGetPreviewBitmapW_MetadataFallback_ReturnsNonZero;
 	end;
 
 implementation
 
 uses
 	Winapi.ActiveX,
-	WlxApi;
+	WlxApi,
+	Tests.GeminiFile.TestUtils;
 
 // ========================================================================
 // Helpers
@@ -1216,6 +1229,66 @@ begin
 	end;
 end;
 
+procedure TTestWlxRenderFunctions.Text_SmallDimensions_HitsMinClamps;
+var
+	LFile: string;
+	LBitmap: HBITMAP;
+begin
+	// Width < 64 triggers LPadding := 4; Height < 120 triggers LFontSize := 10
+	LFile := CreateTempFile('small_text.json',
+		'{"chunks":[{"text":"hello world","role":"user"},{"text":"reply","role":"model"}]}');
+	LBitmap := RenderTextExcerptThumbnail(LFile, 32, 48);
+	try
+		Assert.IsTrue(LBitmap <> 0, 'Small text thumbnail should still render');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
+end;
+
+procedure TTestWlxRenderFunctions.Metadata_SmallDimensions_HitsMinClamps;
+var
+	LFile: string;
+	LBitmap: HBITMAP;
+begin
+	// Width < 64 triggers LPadding := 4; Height < 120 triggers LFontSize := 10
+	LFile := CreateTempFile('small_meta.json',
+		'{"runSettings":{"model":"models/gemini-2.0-flash"},' +
+		'"chunkedPrompt":{"chunks":[{"text":"hi","role":"user","tokenCount":10}]}}');
+	LBitmap := RenderMetadataThumbnail(LFile, 32, 48);
+	try
+		Assert.IsTrue(LBitmap <> 0, 'Small metadata thumbnail should still render');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
+end;
+
+procedure TTestWlxRenderFunctions.Stripe_ManyMarkers_SmallHeight_HitsMinBarHeight;
+var
+	LFile: string;
+	LBitmap: HBITMAP;
+begin
+	// Many markers with small height -> each bar shrinks to 1px minimum
+	LFile := CreateTempFile('many_markers.json',
+		'{"chunks":[' +
+		'{"text":"u1","role":"user"},{"text":"m1","role":"model"},' +
+		'{"text":"u2","role":"user"},{"text":"m2","role":"model"},' +
+		'{"text":"u3","role":"user"},{"text":"m3","role":"model"},' +
+		'{"text":"u4","role":"user"},{"text":"m4","role":"model"},' +
+		'{"text":"u5","role":"user"},{"text":"m5","role":"model"},' +
+		'{"text":"u6","role":"user"},{"text":"m6","role":"model"},' +
+		'{"text":"u7","role":"user"},{"text":"m7","role":"model"},' +
+		'{"text":"u8","role":"user"},{"text":"m8","role":"model"},' +
+		'{"text":"u9","role":"user"},{"text":"m9","role":"model"},' +
+		'{"text":"u10","role":"user"},{"text":"m10","role":"model"}' +
+		']}');
+	LBitmap := RenderStripeThumbnail(LFile, 32, 32);
+	try
+		Assert.IsTrue(LBitmap <> 0, 'Stripe with many markers at tiny size should still render');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
+end;
+
 // ========================================================================
 // TTestWlxExportedFunctions
 // ========================================================================
@@ -1330,6 +1403,57 @@ procedure TTestWlxExportedFunctions.ListSearchTextW_InvalidWindow_ReturnsError;
 begin
 	Assert.AreEqual(LISTPLUGIN_ERROR,
 		ListSearchTextW(0, PWideChar('test'), 0));
+end;
+
+procedure TTestWlxExportedFunctions.ListGetPreviewBitmapW_FileWithImage_ReturnsNonZero;
+var
+	LPath: string;
+	LBitmap: HBITMAP;
+begin
+	// File with embedded images exercises the image decode path (WIC/COM)
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
+	if LPath = '' then
+		Exit;
+	LBitmap := ListGetPreviewBitmapW(PWideChar(LPath), 128, 128, nil, 0);
+	try
+		Assert.IsTrue(LBitmap <> 0,
+			'File with embedded image should produce a thumbnail');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
+end;
+
+procedure TTestWlxExportedFunctions.ListGetPreviewBitmapW_StripeFallback_ReturnsNonZero;
+var
+	LFile: string;
+	LBitmap: HBITMAP;
+begin
+	// Uses RenderStripeThumbnail directly since we can't change global config
+	LFile := CreateTempFile('stripe_fallback.json',
+		'{"chunks":[{"text":"hi","role":"user"},{"text":"hello","role":"model"}]}');
+	LBitmap := RenderStripeThumbnail(LFile, 128, 128);
+	try
+		Assert.IsTrue(LBitmap <> 0, 'Stripe fallback should produce a thumbnail');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
+end;
+
+procedure TTestWlxExportedFunctions.ListGetPreviewBitmapW_MetadataFallback_ReturnsNonZero;
+var
+	LFile: string;
+	LBitmap: HBITMAP;
+begin
+	// Uses RenderMetadataThumbnail directly since we can't change global config
+	LFile := CreateTempFile('meta_fallback.json',
+		'{"runSettings":{"model":"models/gemini-2.0-flash"},' +
+		'"chunkedPrompt":{"chunks":[{"text":"hi","role":"user","tokenCount":10}]}}');
+	LBitmap := RenderMetadataThumbnail(LFile, 128, 128);
+	try
+		Assert.IsTrue(LBitmap <> 0, 'Metadata fallback should produce a thumbnail');
+	finally
+		if LBitmap <> 0 then DeleteObject(LBitmap);
+	end;
 end;
 
 initialization

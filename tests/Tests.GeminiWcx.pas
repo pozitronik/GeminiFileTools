@@ -304,7 +304,7 @@ var
 	LHasDir, LHasEmbedded, LHasThinkDir: Boolean;
 	LFileName: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then
 		Exit;
 
@@ -326,10 +326,10 @@ begin
 				LHasEmbedded := True;
 			LArchive.ProcessCurrentFile(PK_SKIP, '', '');
 		end;
-		// 3 conversations + embedded html + resources dir + think dir + 4 resources = 10
-		Assert.AreEqual<Integer>(10, LCount, 'Should have 10 virtual files');
+		// 3 conversations + embedded html + resources dir + 2 resources = 7
+		Assert.AreEqual<Integer>(7, LCount, 'Should have 7 virtual files');
 		Assert.IsTrue(LHasDir, 'Should have resources directory');
-		Assert.IsTrue(LHasThinkDir, 'Should have resources\think directory');
+		Assert.IsFalse(LHasThinkDir, 'Should not have resources\think directory');
 		Assert.IsTrue(LHasEmbedded, 'Should have embedded HTML');
 	finally
 		LArchive.Free;
@@ -344,7 +344,7 @@ var
 	LFileName: string;
 	LFoundResource: Boolean;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then
 		Exit;
 
@@ -435,7 +435,7 @@ var
 begin
 	// Verify that virtual file list paths for resources correspond exactly
 	// to the resource info paths (with / replaced by \)
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then
 		Exit;
 
@@ -537,7 +537,7 @@ begin
 	try
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('Tailscale.txt', LFileName);
+		Assert.AreEqual('Tailscale..txt', LFileName);
 		Assert.IsTrue(LHeader.UnpSize > 0, 'UnpSize should be non-zero');
 		Assert.IsTrue(LHeader.FileTime > 0, 'FileTime should be non-zero');
 		Assert.AreEqual<Integer>($20, LHeader.FileAttr); // FILE_ATTRIBUTE_ARCHIVE
@@ -554,7 +554,7 @@ var
 	LPath: string;
 	LFileName: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then
 		Exit;
 
@@ -598,7 +598,7 @@ begin
 		// Read first header
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('Tailscale.txt', LFileName);
+		Assert.AreEqual('Tailscale..txt', LFileName);
 
 		// Skip it
 		Assert.AreEqual<Integer>(0, LArchive.ProcessCurrentFile(PK_SKIP, '', ''));
@@ -606,7 +606,7 @@ begin
 		// Read next header -- should be different file
 		Assert.AreEqual<Integer>(0, LArchive.ReadNextHeader(LHeader));
 		LFileName := LHeader.FileName;
-		Assert.AreEqual('Tailscale.md', LFileName);
+		Assert.AreEqual('Tailscale..md', LFileName);
 		LArchive.ProcessCurrentFile(PK_SKIP, '', '');
 	finally
 		LArchive.Free;
@@ -626,7 +626,7 @@ begin
 
 	LOutDir := TPath.Combine(TPath.GetTempPath,
 		'GemViewTest_Wcx_' + TGUID.NewGuid.ToString);
-	LOutFile := TPath.Combine(LOutDir, 'Tailscale.txt');
+	LOutFile := TPath.Combine(LOutDir, 'Tailscale..txt');
 
 	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
 	try
@@ -638,7 +638,7 @@ begin
 		Assert.IsTrue(FileExists(LOutFile), 'Output file should exist');
 
 		LContent := TFile.ReadAllText(LOutFile, TEncoding.UTF8);
-		Assert.Contains(LContent, '=== Gemini Conversation - Tailscale ===');
+		Assert.Contains(LContent, '=== Gemini Conversation - Tailscale. ===');
 		Assert.Contains(LContent, 'models/gemini-2.5-pro');
 	finally
 		LArchive.Free;
@@ -655,7 +655,7 @@ var
 	LFileName: string;
 	LFileSize: Int64;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then
 		Exit;
 
@@ -1139,7 +1139,7 @@ begin
 		// Pass DestPath only, nil for DestName -- combines path with entry name
 		Assert.AreEqual<Integer>(0,
 			ProcessFileW(LHandle, PK_EXTRACT, PWideChar(FTempDir), nil));
-		LExpectedFile := TPath.Combine(FTempDir, 'Tailscale.txt');
+		LExpectedFile := TPath.Combine(FTempDir, 'Tailscale..txt');
 		Assert.IsTrue(FileExists(LExpectedFile),
 			'File should exist at combined path');
 	finally
@@ -1517,7 +1517,7 @@ begin
 	try
 		Assert.AreEqual<Integer>(0, ReadHeader(LHandle, LHeader));
 		LFileName := AnsiString(LHeader.FileName);
-		Assert.AreEqual(AnsiString('Tailscale.txt'), LFileName);
+		Assert.AreEqual(AnsiString('Tailscale..txt'), LFileName);
 		Assert.IsTrue(LHeader.UnpSize > 0, 'UnpSize should be non-zero');
 		Assert.IsTrue(LHeader.FileTime > 0, 'FileTime should be non-zero');
 		ProcessFile(LHandle, PK_SKIP, nil, nil);
@@ -1547,7 +1547,7 @@ begin
 	try
 		Assert.AreEqual<Integer>(0, ReadHeaderEx(LHandle, LHeader));
 		LFileName := AnsiString(LHeader.FileName);
-		Assert.AreEqual(AnsiString('Tailscale.txt'), LFileName);
+		Assert.AreEqual(AnsiString('Tailscale..txt'), LFileName);
 		Assert.IsTrue(LHeader.UnpSize > 0, 'UnpSize should be non-zero');
 		ProcessFile(LHandle, PK_SKIP, nil, nil);
 	finally
@@ -1705,7 +1705,7 @@ var
 	LFileName: string;
 	LContent: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then Exit;
 
 	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
@@ -1722,7 +1722,7 @@ begin
 				LContent := TFile.ReadAllText(LOutFile, TEncoding.UTF8);
 				Assert.Contains(LContent, '<!DOCTYPE html>');
 				// Embedded HTML should contain base64 data URIs
-				Assert.Contains(LContent, 'data:image/jpeg;base64,');
+				Assert.Contains(LContent, 'data:image/png;base64,');
 				Exit;
 			end;
 			LArchive.ProcessCurrentFile(PK_SKIP, '', '');
@@ -1774,7 +1774,7 @@ var
 	LPath, LOutDir: string;
 	LFileName: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then Exit;
 
 	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
@@ -1807,7 +1807,7 @@ var
 	LFileName: string;
 	LContent: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then Exit;
 
 	LArchive := TGeminiArchive.Create(LPath, PK_OM_EXTRACT);
@@ -1879,7 +1879,7 @@ var
 	LPath, LOutFile: string;
 	LFileName: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then Exit;
 
 	LOutFile := TPath.Combine(FTempDir, 'readonly.html');
@@ -1917,10 +1917,10 @@ var
 	LPath, LOutFile: string;
 	LFileName: string;
 begin
-	LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+	LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
 	if LPath = '' then Exit;
 
-	LOutFile := TPath.Combine(FTempDir, 'readonly.jpg');
+	LOutFile := TPath.Combine(FTempDir, 'readonly.png');
 	TFile.WriteAllText(LOutFile, 'existing');
 	TFile.SetAttributes(LOutFile, [TFileAttribute.faReadOnly]);
 	try
@@ -1929,7 +1929,7 @@ begin
 			while LArchive.ReadNextHeader(LHeader) = 0 do
 			begin
 				LFileName := LHeader.FileName;
-				if LFileName.EndsWith('.jpg') then
+				if LFileName.EndsWith('.png') then
 				begin
 					// Extract over the read-only file -- should fail with E_EWRITE
 					Assert.AreEqual<Integer>(E_EWRITE,

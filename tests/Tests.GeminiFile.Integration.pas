@@ -185,7 +185,7 @@ var
   LResources: TArray<TGeminiResource>;
   I: Integer;
 begin
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -193,10 +193,10 @@ begin
   try
     LFile.LoadFromFile(LPath);
     LResources := LFile.GetResources;
-    Assert.AreEqual<Integer>(4, Length(LResources), 'Should have 4 resources');
+    Assert.AreEqual<Integer>(2, Length(LResources), 'Should have 2 resources');
     for I := 0 to High(LResources) do
-      Assert.AreEqual('image/jpeg', LResources[I].MimeType,
-        Format('Resource %d should be image/jpeg', [I]));
+      Assert.AreEqual('image/png', LResources[I].MimeType,
+        Format('Resource %d should be image/png', [I]));
   finally
     LFile.Free;
   end;
@@ -209,7 +209,7 @@ var
   LCount: Integer;
   LFiles: TStringDynArray;
 begin
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -218,13 +218,13 @@ begin
   try
     LFile.LoadFromFile(LPath);
     LCount := LFile.ExtractAllResources(LOutDir, False, 'resource');
-    Assert.AreEqual<Integer>(4, LCount);
+    Assert.AreEqual<Integer>(2, LCount);
 
     LFiles := TDirectory.GetFiles(LOutDir);
-    Assert.AreEqual<Integer>(4, Integer(Length(LFiles)), 'Should produce 4 files');
+    Assert.AreEqual<Integer>(2, Integer(Length(LFiles)), 'Should produce 2 files');
 
     // Each file should have a non-zero size
-    Assert.IsTrue(TFile.GetSize(TPath.Combine(LOutDir, 'resource_000.jpg')) > 0,
+    Assert.IsTrue(TFile.GetSize(TPath.Combine(LOutDir, 'resource_000.png')) > 0,
       'Extracted file should be non-empty');
   finally
     LFile.Free;
@@ -238,14 +238,8 @@ var
   LFile: TGeminiFile;
   LPath: string;
   LResources: TArray<TGeminiResource>;
-  I: Integer;
 begin
-  LPath := FindExample(
-    #$0422#$0438#$0433#$0440#$0438#$0446#$0430 + ', ' +
-    #$041F#$043B#$044E#$0449 + ', ' +
-    #$041F#$0443#$0448#$043A#$0438#$043D + ', ' +
-    #$041B#$0430#$0442#$044B#$043D#$044C + ', ' +
-    #$0413#$0435#$0440#$0431);
+  LPath := FindExample('Creative Application Icon Design');
   if LPath = '' then
     Exit;
 
@@ -253,10 +247,8 @@ begin
   try
     LFile.LoadFromFile(LPath);
     LResources := LFile.GetResources;
-    Assert.AreEqual<Integer>(4, Length(LResources), 'Should have 4 resources');
-    for I := 0 to High(LResources) do
-      Assert.AreEqual('image/png', LResources[I].MimeType,
-        Format('Resource %d should be image/png', [I]));
+    Assert.AreEqual<Integer>(1, Length(LResources), 'Should have 1 resource');
+    Assert.AreEqual('image/png', LResources[0].MimeType, 'Resource should be image/png');
   finally
     LFile.Free;
   end;
@@ -267,19 +259,14 @@ var
   LFile: TGeminiFile;
   LPath: string;
 begin
-  LPath := FindExample(
-    #$0422#$0438#$0433#$0440#$0438#$0446#$0430 + ', ' +
-    #$041F#$043B#$044E#$0449 + ', ' +
-    #$041F#$0443#$0448#$043A#$0438#$043D + ', ' +
-    #$041B#$0430#$0442#$044B#$043D#$044C + ', ' +
-    #$0413#$0435#$0440#$0431);
+  LPath := FindExample('Creative Application Icon Design');
   if LPath = '' then
     Exit;
 
   LFile := TGeminiFile.Create;
   try
     LFile.LoadFromFile(LPath);
-    Assert.AreEqual('models/gemini-2.5-flash-image-preview', LFile.RunSettings.Model);
+    Assert.AreEqual('models/gemini-2.5-flash-image', LFile.RunSettings.Model);
   finally
     LFile.Free;
   end;
@@ -511,7 +498,7 @@ var
   LCount: Integer;
   LFiles: TStringDynArray;
 begin
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -521,10 +508,10 @@ begin
     LFile.LoadFromFile(LPath);
     // Threaded extraction (default = True)
     LCount := LFile.ExtractAllResources(LOutDir, True, 'resource');
-    Assert.AreEqual<Integer>(4, LCount);
+    Assert.AreEqual<Integer>(2, LCount);
 
     LFiles := TDirectory.GetFiles(LOutDir);
-    Assert.AreEqual<Integer>(4, Integer(Length(LFiles)), 'Should produce 4 files');
+    Assert.AreEqual<Integer>(2, Integer(Length(LFiles)), 'Should produce 2 files');
   finally
     LFile.Free;
     if TDirectory.Exists(LOutDir) then
@@ -538,7 +525,7 @@ var
   LPath, LOutDir: string;
   LCallCount: Integer;
 begin
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -733,7 +720,7 @@ var
   LResources: TArray<TGeminiResource>;
 begin
   // Uses a real example file with embedded images to exercise the lazy loading path
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -741,7 +728,7 @@ begin
   try
     LFile.LoadFromFile(LPath);
     LResources := LFile.GetResources;
-    Assert.AreEqual<Integer>(4, Length(LResources), 'Should find 4 lazy resources');
+    Assert.AreEqual<Integer>(2, Length(LResources), 'Should find 2 lazy resources');
     // Verify lazy resources can decode -- accessing Base64Data triggers lazy load
     Assert.IsTrue(Length(LResources[0].Base64Data) > 0, 'Lazy resource should decode on access');
   finally
@@ -755,7 +742,7 @@ var
   LPath, LOutDir: string;
   LCount: Integer;
 begin
-  LPath := FindExample('Gadget Hackwrench In Tulle Dress');
+  LPath := FindExample('Sberbank and Soyuzmultfilm Logo');
   if LPath = '' then
     Exit;
 
@@ -764,9 +751,9 @@ begin
   try
     LFile.LoadFromFile(LPath);
     LCount := LFile.ExtractAllResources(LOutDir, False, 'img');
-    Assert.AreEqual<Integer>(4, LCount);
+    Assert.AreEqual<Integer>(2, LCount);
     // Check that extracted files use the custom prefix
-    Assert.IsTrue(TFile.Exists(TPath.Combine(LOutDir, 'img_000.jpg')),
+    Assert.IsTrue(TFile.Exists(TPath.Combine(LOutDir, 'img_000.png')),
       'Extracted file should use custom prefix "img"');
   finally
     LFile.Free;
