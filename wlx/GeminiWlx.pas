@@ -746,7 +746,16 @@ begin
 	if Failed(args.Get_VirtualKey(LKey)) then
 		Exit;
 
-	// Forward unmodified keys to TC parent so lister hotkeys work
+	// Let WebView2 handle navigation keys (scrolling, page movement)
+	case LKey of
+		VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN,
+		VK_PRIOR, VK_NEXT,  // Page Up / Page Down
+		VK_HOME, VK_END,
+		VK_SPACE, VK_BACK:
+			Exit;
+	end;
+
+	// Forward everything else to TC parent so lister hotkeys work (Esc, N, P, etc.)
 	args.Set_Handled(1);
 	PostMessage(FParentWin, WM_KEYDOWN, LKey, 0);
 end;
