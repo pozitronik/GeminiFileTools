@@ -107,6 +107,8 @@ type
 		procedure DefaultConfig_CombineBlocksAllFalse;
 		[Test]
 		procedure DefaultConfig_EnableFormatsAllTrue;
+		[Test]
+		procedure DefaultConfig_CollapseSystemInstructionIsTrue;
 	end;
 
 	/// <summary>
@@ -902,6 +904,15 @@ begin
 	Assert.IsTrue(LConfig.EnableMarkdown, 'EnableMarkdown default');
 	Assert.IsTrue(LConfig.EnableHtml, 'EnableHtml default');
 	Assert.IsTrue(LConfig.EnableHtmlEmbedded, 'EnableHtmlEmbedded default');
+end;
+
+procedure TTestGeminiWcxPluginConfig.DefaultConfig_CollapseSystemInstructionIsTrue;
+var
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	Assert.IsTrue(LConfig.CollapseSystemInstruction,
+		'CollapseSystemInstruction should default to True');
 end;
 
 // ========================================================================

@@ -32,6 +32,7 @@ type
 		RenderMarkdown: Boolean;
 		DefaultFullWidth: Boolean;
 		DefaultExpandThinking: Boolean;
+		CollapseSystemInstruction: Boolean;
 		UserDataFolder: string;
 		AllowContextMenu: Boolean;
 		AllowDevTools: Boolean;
@@ -213,6 +214,7 @@ const
 	DEF_RenderMarkdown = True;
 	DEF_DefaultFullWidth = False;
 	DEF_DefaultExpandThinking = False;
+	DEF_CollapseSystemInstruction = True;
 	DEF_AllowContextMenu = False;
 	DEF_AllowDevTools = False;
 	DEF_ThumbnailFallback = 'text';
@@ -286,6 +288,7 @@ begin
 		GListerConfig.RenderMarkdown := DEF_RenderMarkdown;
 		GListerConfig.DefaultFullWidth := DEF_DefaultFullWidth;
 		GListerConfig.DefaultExpandThinking := DEF_DefaultExpandThinking;
+		GListerConfig.CollapseSystemInstruction := DEF_CollapseSystemInstruction;
 		GListerConfig.AllowContextMenu := DEF_AllowContextMenu;
 		GListerConfig.AllowDevTools := DEF_AllowDevTools;
 		GListerConfig.ThumbnailFallback := DEF_ThumbnailFallback;
@@ -300,6 +303,7 @@ begin
 				GListerConfig.RenderMarkdown := LIni.ReadBool('General', 'RenderMarkdown', DEF_RenderMarkdown);
 				GListerConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', DEF_DefaultFullWidth);
 				GListerConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', DEF_DefaultExpandThinking);
+				GListerConfig.CollapseSystemInstruction := LIni.ReadBool('HtmlDefaults', 'CollapseSystemInstruction', DEF_CollapseSystemInstruction);
 				GListerConfig.UserDataFolder := LIni.ReadString('WebView2', 'UserDataFolder', '');
 				GListerConfig.AllowContextMenu := LIni.ReadBool('WebView2', 'AllowContextMenu', DEF_AllowContextMenu);
 				GListerConfig.AllowDevTools := LIni.ReadBool('WebView2', 'AllowDevTools', DEF_AllowDevTools);
@@ -538,6 +542,7 @@ begin
 		LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
 		LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
 		LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+		LHtmlFmt.CollapseSystemInstruction := LConfig.CollapseSystemInstruction;
 		LFmt := LHtmlFmt;
 
 		LStream := TMemoryStream.Create;

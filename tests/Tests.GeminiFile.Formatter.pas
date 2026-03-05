@@ -221,6 +221,12 @@ type
 		procedure MetadataHeader_IncludesModelAndSettings;
 		[Test]
 		procedure SourceFileName_IncludedInTitleAndH1;
+		[Test]
+		procedure CollapseSystemInstruction_WrapsInDetails;
+		[Test]
+		procedure CollapseSystemInstructionFalse_KeepsOriginalRendering;
+		[Test]
+		procedure CollapseSystemInstruction_EmptyInstruction_NoOutput;
 	end;
 
 implementation
@@ -1684,6 +1690,90 @@ begin
 	end;
 	Assert.Contains(LResult, '<title>Gemini Conversation - MyChat</title>');
 	Assert.Contains(LResult, '<h1>Gemini Conversation - MyChat</h1>');
+end;
+
+procedure TTestGeminiHtmlFormatter.CollapseSystemInstruction_WrapsInDetails;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LResult: string;
+	LBytes: TBytes;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			// CollapseSystemInstruction defaults to True
+			LFormatter.FormatToStream(LStream, FChunks, 'Be concise.', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<details class="system-instruction-details">');
+	Assert.Contains(LResult, '<summary>System Instruction</summary>');
+	Assert.Contains(LResult, 'Be concise.');
+	Assert.Contains(LResult, '</details>');
+end;
+
+procedure TTestGeminiHtmlFormatter.CollapseSystemInstructionFalse_KeepsOriginalRendering;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LResult: string;
+	LBytes: TBytes;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.CollapseSystemInstruction := False;
+			LFormatter.FormatToStream(LStream, FChunks, 'Be concise.', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	Assert.Contains(LResult, '<div class="section-title">System Instruction</div>');
+	Assert.Contains(LResult, '<div class="system-instruction">Be concise.</div>');
+	Assert.DoesNotContain(LResult, '<details class="system-instruction-details">');
+end;
+
+procedure TTestGeminiHtmlFormatter.CollapseSystemInstruction_EmptyInstruction_NoOutput;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LResult: string;
+	LBytes: TBytes;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(False);
+		try
+			LFormatter.FormatToStream(LStream, FChunks, '', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+	// CSS class definitions are always present; check that no actual system instruction block is rendered
+	Assert.DoesNotContain(LResult, '<details class="system-instruction-details">');
+	Assert.DoesNotContain(LResult, '<div class="section-title">System Instruction</div>');
 end;
 
 initialization

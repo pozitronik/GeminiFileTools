@@ -110,6 +110,7 @@ type
 		CombineBlocksText: Boolean;
 		CombineBlocksMd: Boolean;
 		CombineBlocksHtml: Boolean;
+		CollapseSystemInstruction: Boolean;
 	end;
 
 	/// <summary>
@@ -166,6 +167,7 @@ const
 	DEF_CombineBlocksText = False;
 	DEF_CombineBlocksMd = False;
 	DEF_CombineBlocksHtml = False;
+	DEF_CollapseSystemInstruction = True;
 
 var
 	/// Tracks live archive handles for validation (thread-safe for background unpack)
@@ -220,6 +222,7 @@ begin
 		GPluginConfig.HideEmptyBlocksMd := DEF_HideEmptyBlocksMd;
 		GPluginConfig.HideEmptyBlocksHtml := DEF_HideEmptyBlocksHtml;
 		GPluginConfig.RenderMarkdown := DEF_RenderMarkdown;
+		GPluginConfig.CollapseSystemInstruction := DEF_CollapseSystemInstruction;
 		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
 		begin
 			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
@@ -241,6 +244,7 @@ begin
 					GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', DEF_CombineBlocksText);
 					GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', DEF_CombineBlocksMd);
 					GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', DEF_CombineBlocksHtml);
+				GPluginConfig.CollapseSystemInstruction := LIni.ReadBool('HtmlDefaults', 'CollapseSystemInstruction', DEF_CollapseSystemInstruction);
 				finally
 					LIni.Free;
 				end;
@@ -368,6 +372,7 @@ begin
 	AFormatter.DefaultFullWidth := AConfig.DefaultFullWidth;
 	AFormatter.DefaultExpandThinking := AConfig.DefaultExpandThinking;
 	AFormatter.RenderMarkdown := AConfig.RenderMarkdown;
+	AFormatter.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
 	AFormatter.CombineBlocks := AConfig.CombineBlocksHtml;
 end;
 

@@ -28,6 +28,7 @@ type
 		FEmbedResources: Boolean;
 		FDefaultFullWidth: Boolean;
 		FDefaultExpandThinking: Boolean;
+		FCollapseSystemInstruction: Boolean;
 		FRenderMarkdown: Boolean;
 		FCustomCSS: string;
 		/// <summary>Writes a content div, applying Markdown rendering or HTML escaping.</summary>
@@ -63,6 +64,8 @@ type
 		property DefaultExpandThinking: Boolean read FDefaultExpandThinking write FDefaultExpandThinking;
 		/// <summary>When True, Markdown in model output is rendered as HTML (bold, italic, code, etc).</summary>
 		property RenderMarkdown: Boolean read FRenderMarkdown write FRenderMarkdown;
+		/// <summary>When True, system instruction is wrapped in a collapsible details element (default collapsed).</summary>
+		property CollapseSystemInstruction: Boolean read FCollapseSystemInstruction write FCollapseSystemInstruction;
 	end;
 
 implementation
@@ -83,6 +86,10 @@ const
 		' border-bottom: 1px solid #ddd; padding-bottom: 5px; }' + CRLF +
 		'.system-instruction { background: #fff8e1; border-left: 4px solid #ffc107;' +
 		' padding: 12px 16px; margin: 10px 0 20px; white-space: pre-wrap; word-wrap: break-word; }' + CRLF +
+		'.system-instruction-details { background: #fff8e1; border-left: 4px solid #ffc107;' +
+		' border-radius: 4px; padding: 8px 12px; margin: 10px 0 20px; }' + CRLF +
+		'.system-instruction-details summary { cursor: pointer; font-weight: bold; color: #333; font-style: normal; }' + CRLF +
+		'.system-instruction-details .system-instruction { margin: 8px 0 0; border-left: none; padding: 0; }' + CRLF +
 		'hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }' + CRLF;
 
 	/// Message bubbles: user/model blocks, role labels, tokens, content, thinking
@@ -156,6 +163,7 @@ begin
 	inherited Create;
 	FEmbedResources := AEmbedResources;
 	FRenderMarkdown := True;
+	FCollapseSystemInstruction := True;
 	FCustomCSS := ACustomCSS;
 end;
 
@@ -226,8 +234,18 @@ begin
 	// System instruction
 	if ASystemInstruction <> '' then
 	begin
-		StreamWriteLn(AOutput, '<div class="section-title">System Instruction</div>');
-		StreamWriteLn(AOutput, '<div class="system-instruction">' + HtmlEscape(ASystemInstruction) + '</div>');
+		if FCollapseSystemInstruction then
+		begin
+			StreamWriteLn(AOutput, '<details class="system-instruction-details">');
+			StreamWriteLn(AOutput, '<summary>System Instruction</summary>');
+			StreamWriteLn(AOutput, '<div class="system-instruction">' + HtmlEscape(ASystemInstruction) + '</div>');
+			StreamWriteLn(AOutput, '</details>');
+		end
+		else
+		begin
+			StreamWriteLn(AOutput, '<div class="section-title">System Instruction</div>');
+			StreamWriteLn(AOutput, '<div class="system-instruction">' + HtmlEscape(ASystemInstruction) + '</div>');
+		end;
 	end;
 
 	StreamWriteLn(AOutput, '<hr>');

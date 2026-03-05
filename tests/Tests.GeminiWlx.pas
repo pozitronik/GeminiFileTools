@@ -162,6 +162,8 @@ type
 		procedure DefaultAllowContextMenu_IsFalse;
 		[Test]
 		procedure DefaultAllowDevTools_IsFalse;
+		[Test]
+		procedure DefaultCollapseSystemInstruction_IsTrue;
 	end;
 
 	/// <summary>
@@ -955,6 +957,15 @@ var
 begin
 	LConfig := GetListerConfig;
 	Assert.IsFalse(LConfig.AllowDevTools);
+end;
+
+procedure TTestWlxConfig.DefaultCollapseSystemInstruction_IsTrue;
+var
+	LConfig: TListerConfig;
+begin
+	LConfig := GetListerConfig;
+	Assert.IsTrue(LConfig.CollapseSystemInstruction,
+		'CollapseSystemInstruction should default to True');
 end;
 
 // ========================================================================
