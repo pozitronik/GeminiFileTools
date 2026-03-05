@@ -26,7 +26,8 @@ uses
 	GeminiFile.Formatter.Intf,
 	GeminiFile.Formatter.Text,
 	GeminiFile.Formatter.Md,
-	GeminiFile.Formatter.Html;
+	GeminiFile.Formatter.Html,
+	GeminiPlugin.Shared;
 
 type
 	TVirtualFileKind = (vfConversationText, vfConversationMarkdown, vfConversationHtml, vfConversationHtmlEmbedded, vfResourceDir, vfResource);
@@ -170,41 +171,15 @@ const
 var
 	/// Tracks live archive handles for validation (thread-safe for background unpack)
 	GArchives: TThreadList<TGeminiArchive>;
-	/// Cached custom CSS from gemini.css next to the DLL
-	GCustomCSS: string;
-	GCustomCSSLoaded: Boolean;
 	/// Cached plugin configuration from gemini.ini
 	GPluginConfig: TPluginConfig;
 	GPluginConfigLoaded: Boolean;
 
-	/// <summary>
-	///   Returns custom CSS content from gemini.css located next to the plugin DLL.
-	///   Caches the result on first call; returns empty string if file not found.
-	/// </summary>
-function GetCustomCSS: string;
-var
-	LDllPath: array [0 .. MAX_PATH] of Char;
-	LCssPath: string;
-begin
-	if not GCustomCSSLoaded then
-	begin
-		GCustomCSSLoaded := True;
-		GCustomCSS := '';
-		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
-		begin
-			LCssPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.css');
-			if TFile.Exists(LCssPath) then
-				GCustomCSS := TFile.ReadAllText(LCssPath, TEncoding.UTF8);
-		end;
-	end;
-	Result := GCustomCSS;
-end;
-
 function GetPluginConfig: TPluginConfig;
 var
-	LDllPath: array [0 .. MAX_PATH] of Char;
 	LIniPath: string;
 	LIni: TIniFile;
+	LHtmlDefaults: TSharedHtmlDefaults;
 begin
 	if not GPluginConfigLoaded then
 	begin
@@ -221,31 +196,31 @@ begin
 		GPluginConfig.HideEmptyBlocksHtml := DEF_HideEmptyBlocksHtml;
 		GPluginConfig.RenderMarkdown := DEF_RenderMarkdown;
 		GPluginConfig.CollapseSystemInstruction := DEF_CollapseSystemInstruction;
-		if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
+
+		LIniPath := TPath.Combine(GetPluginDir, 'gemini.ini');
+		if TFile.Exists(LIniPath) then
 		begin
-			LIniPath := TPath.Combine(TPath.GetDirectoryName(LDllPath), 'gemini.ini');
-			if TFile.Exists(LIniPath) then
-			begin
-				LIni := TIniFile.Create(LIniPath);
-				try
-					GPluginConfig.UseOriginalName := LIni.ReadBool('General', 'UseOriginalName', DEF_UseOriginalName);
-					GPluginConfig.EnableText := LIni.ReadBool('Formatters', 'EnableText', DEF_EnableText);
-					GPluginConfig.EnableMarkdown := LIni.ReadBool('Formatters', 'EnableMarkdown', DEF_EnableMarkdown);
-					GPluginConfig.EnableHtml := LIni.ReadBool('Formatters', 'EnableHtml', DEF_EnableHtml);
-					GPluginConfig.EnableHtmlEmbedded := LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', DEF_EnableHtmlEmbedded);
-					GPluginConfig.HideEmptyBlocksText := LIni.ReadBool('Formatters', 'HideEmptyBlocksText', DEF_HideEmptyBlocksText);
-					GPluginConfig.HideEmptyBlocksMd := LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', DEF_HideEmptyBlocksMd);
-					GPluginConfig.HideEmptyBlocksHtml := LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', DEF_HideEmptyBlocksHtml);
-					GPluginConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', DEF_DefaultFullWidth);
-					GPluginConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', DEF_DefaultExpandThinking);
-					GPluginConfig.RenderMarkdown := LIni.ReadBool('HtmlDefaults', 'RenderMarkdown', DEF_RenderMarkdown);
-					GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', DEF_CombineBlocksText);
-					GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', DEF_CombineBlocksMd);
-					GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', DEF_CombineBlocksHtml);
-				GPluginConfig.CollapseSystemInstruction := LIni.ReadBool('HtmlDefaults', 'CollapseSystemInstruction', DEF_CollapseSystemInstruction);
-				finally
-					LIni.Free;
-				end;
+			LIni := TIniFile.Create(LIniPath);
+			try
+				GPluginConfig.UseOriginalName := LIni.ReadBool('General', 'UseOriginalName', DEF_UseOriginalName);
+				GPluginConfig.EnableText := LIni.ReadBool('Formatters', 'EnableText', DEF_EnableText);
+				GPluginConfig.EnableMarkdown := LIni.ReadBool('Formatters', 'EnableMarkdown', DEF_EnableMarkdown);
+				GPluginConfig.EnableHtml := LIni.ReadBool('Formatters', 'EnableHtml', DEF_EnableHtml);
+				GPluginConfig.EnableHtmlEmbedded := LIni.ReadBool('Formatters', 'EnableHtmlEmbedded', DEF_EnableHtmlEmbedded);
+				GPluginConfig.HideEmptyBlocksText := LIni.ReadBool('Formatters', 'HideEmptyBlocksText', DEF_HideEmptyBlocksText);
+				GPluginConfig.HideEmptyBlocksMd := LIni.ReadBool('Formatters', 'HideEmptyBlocksMd', DEF_HideEmptyBlocksMd);
+				GPluginConfig.HideEmptyBlocksHtml := LIni.ReadBool('Formatters', 'HideEmptyBlocksHtml', DEF_HideEmptyBlocksHtml);
+				GPluginConfig.CombineBlocksText := LIni.ReadBool('Formatters', 'CombineBlocksText', DEF_CombineBlocksText);
+				GPluginConfig.CombineBlocksMd := LIni.ReadBool('Formatters', 'CombineBlocksMd', DEF_CombineBlocksMd);
+				GPluginConfig.CombineBlocksHtml := LIni.ReadBool('Formatters', 'CombineBlocksHtml', DEF_CombineBlocksHtml);
+				ReadHtmlDefaults(LIni, DEF_DefaultFullWidth, DEF_DefaultExpandThinking,
+					DEF_RenderMarkdown, DEF_CollapseSystemInstruction, LHtmlDefaults);
+				GPluginConfig.DefaultFullWidth := LHtmlDefaults.DefaultFullWidth;
+				GPluginConfig.DefaultExpandThinking := LHtmlDefaults.DefaultExpandThinking;
+				GPluginConfig.RenderMarkdown := LHtmlDefaults.RenderMarkdown;
+				GPluginConfig.CollapseSystemInstruction := LHtmlDefaults.CollapseSystemInstruction;
+			finally
+				LIni.Free;
 			end;
 		end;
 	end;
@@ -327,19 +302,18 @@ begin
 	end;
 end;
 
-/// <summary>Builds an HTML formatter config from plugin config and custom CSS.</summary>
-function BuildHtmlConfig(const AConfig: TPluginConfig; AEmbedResources: Boolean; const ASourceFileName, ACustomCSS: string): TGeminiHtmlFormatterConfig;
+/// <summary>Builds an HTML formatter config from WCX plugin config.</summary>
+function BuildWcxHtmlConfig(const AConfig: TPluginConfig; AEmbedResources: Boolean;
+	const ASourceFileName, ACustomCSS: string): TGeminiHtmlFormatterConfig;
+var
+	LDefaults: TSharedHtmlDefaults;
 begin
-	Result := TGeminiHtmlFormatterConfig.Default;
-	Result.EmbedResources := AEmbedResources;
-	Result.HideEmptyBlocks := AConfig.HideEmptyBlocksHtml;
-	Result.DefaultFullWidth := AConfig.DefaultFullWidth;
-	Result.DefaultExpandThinking := AConfig.DefaultExpandThinking;
-	Result.RenderMarkdown := AConfig.RenderMarkdown;
-	Result.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
-	Result.CombineBlocks := AConfig.CombineBlocksHtml;
-	Result.SourceFileName := ASourceFileName;
-	Result.CustomCSS := ACustomCSS;
+	LDefaults.DefaultFullWidth := AConfig.DefaultFullWidth;
+	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking;
+	LDefaults.RenderMarkdown := AConfig.RenderMarkdown;
+	LDefaults.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	Result := BuildHtmlFormatterConfig(AEmbedResources, ASourceFileName, ACustomCSS,
+		AConfig.HideEmptyBlocksHtml, AConfig.CombineBlocksHtml, LDefaults);
 end;
 
 function TGeminiArchive.FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
@@ -381,7 +355,7 @@ begin
 	FCachedMarkdown := FormatToBytes(LFmt);
 
 	// HTML (external resources)
-	LFmt := TGeminiHtmlFormatter.Create(BuildHtmlConfig(LConfig, False, TPath.GetFileNameWithoutExtension(FFileName), GetCustomCSS));
+	LFmt := TGeminiHtmlFormatter.Create(BuildWcxHtmlConfig(LConfig, False, TPath.GetFileNameWithoutExtension(FFileName), LoadCustomCSS));
 	FCachedHtml := FormatToBytes(LFmt);
 end;
 
@@ -544,7 +518,7 @@ begin
 
 				// Generate on-demand (can be large)
 				LConfig := GetPluginConfig;
-				LFmt := TGeminiHtmlFormatter.Create(BuildHtmlConfig(LConfig, True, TPath.GetFileNameWithoutExtension(FFileName), GetCustomCSS));
+				LFmt := TGeminiHtmlFormatter.Create(BuildWcxHtmlConfig(LConfig, True, TPath.GetFileNameWithoutExtension(FFileName), LoadCustomCSS));
 				Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
 
 				// Release base64 data to free memory

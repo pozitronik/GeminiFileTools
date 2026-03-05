@@ -23,7 +23,8 @@ uses
 	GeminiFile.Extractor,
 	GeminiFile,
 	GeminiFile.Formatter.Intf,
-	GeminiFile.Formatter.Html;
+	GeminiFile.Formatter.Html,
+	GeminiPlugin.Shared;
 
 type
 	TListerConfig = record
@@ -234,50 +235,17 @@ type
 
 var
 	GClassRegistered: Boolean;
-	GCustomCSS: string;
-	GCustomCSSLoaded: Boolean;
 	GListerConfig: TListerConfig;
 	GListerConfigLoaded: Boolean;
 	GLoaderHandle: HMODULE;
 	GCreateEnvironment: TCreateCoreWebView2EnvironmentWithOptionsFunc;
 	GComInitialized: Boolean;
 
-	/// <summary>
-	///   Returns the directory containing the plugin DLL.
-	/// </summary>
-function GetPluginDir: string;
-var
-	LDllPath: array [0 .. MAX_PATH] of Char;
-begin
-	if GetModuleFileName(HInstance, LDllPath, MAX_PATH + 1) > 0 then
-		Result := TPath.GetDirectoryName(LDllPath)
-	else
-		Result := '';
-end;
-
-/// <summary>
-///   Returns custom CSS content from gemini.css located next to the plugin DLL.
-///   Caches the result on first call; returns empty string if file not found.
-/// </summary>
-function GetCustomCSS: string;
-var
-	LCssPath: string;
-begin
-	if not GCustomCSSLoaded then
-	begin
-		GCustomCSSLoaded := True;
-		GCustomCSS := '';
-		LCssPath := TPath.Combine(GetPluginDir, 'gemini.css');
-		if TFile.Exists(LCssPath) then
-			GCustomCSS := TFile.ReadAllText(LCssPath, TEncoding.UTF8);
-	end;
-	Result := GCustomCSS;
-end;
-
 function GetListerConfig: TListerConfig;
 var
 	LIniPath: string;
 	LIni: TIniFile;
+	LHtmlDefaults: TSharedHtmlDefaults;
 begin
 	if not GListerConfigLoaded then
 	begin
@@ -301,9 +269,13 @@ begin
 				GListerConfig.HideEmptyBlocks := LIni.ReadBool('General', 'HideEmptyBlocks', DEF_HideEmptyBlocks);
 				GListerConfig.CombineBlocks := LIni.ReadBool('General', 'CombineBlocks', DEF_CombineBlocks);
 				GListerConfig.RenderMarkdown := LIni.ReadBool('General', 'RenderMarkdown', DEF_RenderMarkdown);
-				GListerConfig.DefaultFullWidth := LIni.ReadBool('HtmlDefaults', 'DefaultFullWidth', DEF_DefaultFullWidth);
-				GListerConfig.DefaultExpandThinking := LIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', DEF_DefaultExpandThinking);
-				GListerConfig.CollapseSystemInstruction := LIni.ReadBool('HtmlDefaults', 'CollapseSystemInstruction', DEF_CollapseSystemInstruction);
+				ReadHtmlDefaults(LIni, DEF_DefaultFullWidth, DEF_DefaultExpandThinking,
+					DEF_RenderMarkdown, DEF_CollapseSystemInstruction, LHtmlDefaults);
+				GListerConfig.DefaultFullWidth := LHtmlDefaults.DefaultFullWidth;
+				GListerConfig.DefaultExpandThinking := LHtmlDefaults.DefaultExpandThinking;
+				GListerConfig.CollapseSystemInstruction := LHtmlDefaults.CollapseSystemInstruction;
+				// RenderMarkdown: prefer [General] value if set, fall back to [HtmlDefaults]
+				// (WLX reads RenderMarkdown from General section, not HtmlDefaults)
 				GListerConfig.UserDataFolder := LIni.ReadString('WebView2', 'UserDataFolder', '');
 				GListerConfig.AllowContextMenu := LIni.ReadBool('WebView2', 'AllowContextMenu', DEF_AllowContextMenu);
 				GListerConfig.AllowDevTools := LIni.ReadBool('WebView2', 'AllowDevTools', DEF_AllowDevTools);
@@ -314,6 +286,20 @@ begin
 		end;
 	end;
 	Result := GListerConfig;
+end;
+
+/// <summary>Builds an HTML formatter config from WLX lister config.</summary>
+function BuildWlxHtmlConfig(const AConfig: TListerConfig; AEmbedResources: Boolean;
+	const ASourceFileName: string): TGeminiHtmlFormatterConfig;
+var
+	LDefaults: TSharedHtmlDefaults;
+begin
+	LDefaults.DefaultFullWidth := AConfig.DefaultFullWidth;
+	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking;
+	LDefaults.RenderMarkdown := AConfig.RenderMarkdown;
+	LDefaults.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	Result := BuildHtmlFormatterConfig(AEmbedResources, ASourceFileName, LoadCustomCSS,
+		AConfig.HideEmptyBlocks, AConfig.CombineBlocks, LDefaults);
 end;
 
 /// <summary>
@@ -524,17 +510,9 @@ begin
 		for I := 0 to High(LResources) do
 			LResourceInfos[I].Base64Data := LResources[I].Base64Data;
 
-		// Generate embedded HTML
-		LHtmlConfig := TGeminiHtmlFormatterConfig.Default;
-		LHtmlConfig.EmbedResources := True;
-		LHtmlConfig.SourceFileName := TPath.GetFileNameWithoutExtension(AFileName);
-		LHtmlConfig.CustomCSS := GetCustomCSS;
-		LHtmlConfig.HideEmptyBlocks := LConfig.HideEmptyBlocks;
-		LHtmlConfig.CombineBlocks := LConfig.CombineBlocks;
-		LHtmlConfig.RenderMarkdown := LConfig.RenderMarkdown;
-		LHtmlConfig.DefaultFullWidth := LConfig.DefaultFullWidth;
-		LHtmlConfig.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-		LHtmlConfig.CollapseSystemInstruction := LConfig.CollapseSystemInstruction;
+		// Generate embedded HTML using shared config builder
+		LHtmlConfig := BuildWlxHtmlConfig(LConfig, True,
+			TPath.GetFileNameWithoutExtension(AFileName));
 		LFmt := TGeminiHtmlFormatter.Create(LHtmlConfig);
 
 		LStream := TMemoryStream.Create;

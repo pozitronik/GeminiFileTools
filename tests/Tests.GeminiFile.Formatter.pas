@@ -19,21 +19,37 @@ uses
 	GeminiFile.Formatter.Html;
 
 type
-	[TestFixture]
-	TTestGeminiTextFormatter = class
-	private
-		FFormatter: TGeminiTextFormatter;
+	/// <summary>
+	///   Base class for formatter test fixtures. Provides shared chunk list,
+	///   run settings, and helper methods to avoid duplication across formatters.
+	/// </summary>
+	TFormatterTestBase = class
+	protected
 		FChunks: TObjectList<TGeminiChunk>;
 		FRunSettings: TGeminiRunSettings;
-		function FormatToString(const ASystemInstruction: string;
-			const AResources: TArray<TFormatterResourceInfo>): string;
+		/// <summary>Creates a test chunk and sets its Index to the current chunk count.</summary>
 		function MakeChunk(ARole: TGeminiRole; const AText: string;
 			ATokenCount: Integer = 0; AIsThought: Boolean = False): TGeminiChunk;
+		/// <summary>Reads a memory stream as UTF-8 text. Returns empty string for empty streams.</summary>
+		function StreamToString(AStream: TMemoryStream): string;
 	public
 		[Setup]
-		procedure Setup;
+		procedure Setup; virtual;
 		[TearDown]
-		procedure TearDown;
+		procedure TearDown; virtual;
+	end;
+
+	[TestFixture]
+	TTestGeminiTextFormatter = class(TFormatterTestBase)
+	private
+		FFormatter: TGeminiTextFormatter;
+		function FormatToString(const ASystemInstruction: string;
+			const AResources: TArray<TFormatterResourceInfo>): string;
+	public
+		[Setup]
+		procedure Setup; override;
+		[TearDown]
+		procedure TearDown; override;
 
 		[Test]
 		procedure EmptyConversation_ProducesHeaderOnly;
@@ -82,20 +98,16 @@ type
 	end;
 
 	[TestFixture]
-	TTestGeminiMarkdownFormatter = class
+	TTestGeminiMarkdownFormatter = class(TFormatterTestBase)
 	private
 		FFormatter: TGeminiMarkdownFormatter;
-		FChunks: TObjectList<TGeminiChunk>;
-		FRunSettings: TGeminiRunSettings;
 		function FormatToString(const ASystemInstruction: string;
 			const AResources: TArray<TFormatterResourceInfo>): string;
-		function MakeChunk(ARole: TGeminiRole; const AText: string;
-			ATokenCount: Integer = 0; AIsThought: Boolean = False): TGeminiChunk;
 	public
 		[Setup]
-		procedure Setup;
+		procedure Setup; override;
 		[TearDown]
-		procedure TearDown;
+		procedure TearDown; override;
 
 		[Test]
 		procedure EmptyConversation_ProducesHeaderOnly;
@@ -142,20 +154,16 @@ type
 	end;
 
 	[TestFixture]
-	TTestGeminiHtmlFormatter = class
+	TTestGeminiHtmlFormatter = class(TFormatterTestBase)
 	private
-		FChunks: TObjectList<TGeminiChunk>;
-		FRunSettings: TGeminiRunSettings;
 		function FormatToString(AEmbedResources: Boolean;
 			const ASystemInstruction: string;
 			const AResources: TArray<TFormatterResourceInfo>): string;
-		function MakeChunk(ARole: TGeminiRole; const AText: string;
-			ATokenCount: Integer = 0; AIsThought: Boolean = False): TGeminiChunk;
 	public
 		[Setup]
-		procedure Setup;
+		procedure Setup; override;
 		[TearDown]
-		procedure TearDown;
+		procedure TearDown; override;
 
 		[Test]
 		procedure ExternalMode_ImagesUseSrcPaths;
@@ -234,48 +242,22 @@ type
 implementation
 
 // ========================================================================
-// TTestGeminiTextFormatter
+// TFormatterTestBase
 // ========================================================================
 
-procedure TTestGeminiTextFormatter.Setup;
+procedure TFormatterTestBase.Setup;
 begin
-	FFormatter := TGeminiTextFormatter.Create;
 	FChunks := TObjectList<TGeminiChunk>.Create(True);
 	FRunSettings := TGeminiRunSettings.Create;
 end;
 
-procedure TTestGeminiTextFormatter.TearDown;
+procedure TFormatterTestBase.TearDown;
 begin
-	FFormatter.Free;
 	FChunks.Free;
 	FRunSettings.Free;
 end;
 
-function TTestGeminiTextFormatter.FormatToString(const ASystemInstruction: string;
-	const AResources: TArray<TFormatterResourceInfo>): string;
-var
-	LStream: TMemoryStream;
-	LBytes: TBytes;
-begin
-	LStream := TMemoryStream.Create;
-	try
-		FFormatter.FormatToStream(LStream, FChunks, ASystemInstruction,
-			FRunSettings, AResources);
-		if LStream.Size > 0 then
-		begin
-			SetLength(LBytes, LStream.Size);
-			LStream.Position := 0;
-			LStream.ReadBuffer(LBytes[0], LStream.Size);
-			Result := TEncoding.UTF8.GetString(LBytes);
-		end
-		else
-			Result := '';
-	finally
-		LStream.Free;
-	end;
-end;
-
-function TTestGeminiTextFormatter.MakeChunk(ARole: TGeminiRole;
+function TFormatterTestBase.MakeChunk(ARole: TGeminiRole;
 	const AText: string; ATokenCount: Integer; AIsThought: Boolean): TGeminiChunk;
 begin
 	Result := TGeminiChunk.Create;
@@ -284,6 +266,52 @@ begin
 	Result.TokenCount := ATokenCount;
 	Result.IsThought := AIsThought;
 	Result.Index := FChunks.Count;
+end;
+
+function TFormatterTestBase.StreamToString(AStream: TMemoryStream): string;
+var
+	LBytes: TBytes;
+begin
+	if AStream.Size > 0 then
+	begin
+		SetLength(LBytes, AStream.Size);
+		AStream.Position := 0;
+		AStream.ReadBuffer(LBytes[0], AStream.Size);
+		Result := TEncoding.UTF8.GetString(LBytes);
+	end
+	else
+		Result := '';
+end;
+
+// ========================================================================
+// TTestGeminiTextFormatter
+// ========================================================================
+
+procedure TTestGeminiTextFormatter.Setup;
+begin
+	inherited;
+	FFormatter := TGeminiTextFormatter.Create;
+end;
+
+procedure TTestGeminiTextFormatter.TearDown;
+begin
+	FFormatter.Free;
+	inherited;
+end;
+
+function TTestGeminiTextFormatter.FormatToString(const ASystemInstruction: string;
+	const AResources: TArray<TFormatterResourceInfo>): string;
+var
+	LStream: TMemoryStream;
+begin
+	LStream := TMemoryStream.Create;
+	try
+		FFormatter.FormatToStream(LStream, FChunks, ASystemInstruction,
+			FRunSettings, AResources);
+		Result := StreamToString(LStream);
+	finally
+		LStream.Free;
+	end;
 end;
 
 procedure TTestGeminiTextFormatter.EmptyConversation_ProducesHeaderOnly;
@@ -601,51 +629,29 @@ end;
 
 procedure TTestGeminiMarkdownFormatter.Setup;
 begin
+	inherited;
 	FFormatter := TGeminiMarkdownFormatter.Create;
-	FChunks := TObjectList<TGeminiChunk>.Create(True);
-	FRunSettings := TGeminiRunSettings.Create;
 end;
 
 procedure TTestGeminiMarkdownFormatter.TearDown;
 begin
 	FFormatter.Free;
-	FChunks.Free;
-	FRunSettings.Free;
+	inherited;
 end;
 
 function TTestGeminiMarkdownFormatter.FormatToString(const ASystemInstruction: string;
 	const AResources: TArray<TFormatterResourceInfo>): string;
 var
 	LStream: TMemoryStream;
-	LBytes: TBytes;
 begin
 	LStream := TMemoryStream.Create;
 	try
 		FFormatter.FormatToStream(LStream, FChunks, ASystemInstruction,
 			FRunSettings, AResources);
-		if LStream.Size > 0 then
-		begin
-			SetLength(LBytes, LStream.Size);
-			LStream.Position := 0;
-			LStream.ReadBuffer(LBytes[0], LStream.Size);
-			Result := TEncoding.UTF8.GetString(LBytes);
-		end
-		else
-			Result := '';
+		Result := StreamToString(LStream);
 	finally
 		LStream.Free;
 	end;
-end;
-
-function TTestGeminiMarkdownFormatter.MakeChunk(ARole: TGeminiRole;
-	const AText: string; ATokenCount: Integer; AIsThought: Boolean): TGeminiChunk;
-begin
-	Result := TGeminiChunk.Create;
-	Result.Role := ARole;
-	Result.Text := AText;
-	Result.TokenCount := ATokenCount;
-	Result.IsThought := AIsThought;
-	Result.Index := FChunks.Count;
 end;
 
 procedure TTestGeminiMarkdownFormatter.EmptyConversation_ProducesHeaderOnly;
@@ -959,14 +965,12 @@ end;
 
 procedure TTestGeminiHtmlFormatter.Setup;
 begin
-	FChunks := TObjectList<TGeminiChunk>.Create(True);
-	FRunSettings := TGeminiRunSettings.Create;
+	inherited;
 end;
 
 procedure TTestGeminiHtmlFormatter.TearDown;
 begin
-	FChunks.Free;
-	FRunSettings.Free;
+	inherited;
 end;
 
 function TTestGeminiHtmlFormatter.FormatToString(AEmbedResources: Boolean;
@@ -975,7 +979,6 @@ function TTestGeminiHtmlFormatter.FormatToString(AEmbedResources: Boolean;
 var
 	LStream: TMemoryStream;
 	LFormatter: TGeminiHtmlFormatter;
-	LBytes: TBytes;
 begin
 	LStream := TMemoryStream.Create;
 	try
@@ -986,29 +989,10 @@ begin
 		finally
 			LFormatter.Free;
 		end;
-		if LStream.Size > 0 then
-		begin
-			SetLength(LBytes, LStream.Size);
-			LStream.Position := 0;
-			LStream.ReadBuffer(LBytes[0], LStream.Size);
-			Result := TEncoding.UTF8.GetString(LBytes);
-		end
-		else
-			Result := '';
+		Result := StreamToString(LStream);
 	finally
 		LStream.Free;
 	end;
-end;
-
-function TTestGeminiHtmlFormatter.MakeChunk(ARole: TGeminiRole;
-	const AText: string; ATokenCount: Integer; AIsThought: Boolean): TGeminiChunk;
-begin
-	Result := TGeminiChunk.Create;
-	Result.Role := ARole;
-	Result.Text := AText;
-	Result.TokenCount := ATokenCount;
-	Result.IsThought := AIsThought;
-	Result.Index := FChunks.Count;
 end;
 
 procedure TTestGeminiHtmlFormatter.ExternalMode_ImagesUseSrcPaths;

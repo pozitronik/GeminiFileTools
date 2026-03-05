@@ -20,7 +20,8 @@ uses
 	GeminiFile.Model,
 	GeminiFile.Parser,
 	GeminiFile.Extractor,
-	GeminiFile;
+	GeminiFile,
+	Tests.GeminiFile.TestUtils;
 
 type
 	[TestFixture]
@@ -117,16 +118,8 @@ type
 	///   CanYouHandleThisFile file sniffing, and error handling paths.
 	/// </summary>
 	[TestFixture]
-	TTestGeminiWcxExportedApi = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
-		function CreateTempFileBytes(const AName: string; const ABytes: TBytes): string;
+	TTestGeminiWcxExportedApi = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 
 		[Test]
 		procedure GetPackerCaps_ReturnsCorrectFlags;
@@ -203,15 +196,8 @@ type
 	///   Verifies that ANSI wrappers correctly delegate to Unicode implementations.
 	/// </summary>
 	[TestFixture]
-	TTestGeminiWcxAnsiCompat = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestGeminiWcxAnsiCompat = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 
 		[Test]
 		procedure OpenArchive_Ansi_ReturnsHandle;
@@ -239,14 +225,8 @@ type
 	///   Tests for special extraction paths (embedded HTML, directories).
 	/// </summary>
 	[TestFixture]
-	TTestGeminiWcxExtractSpecial = class
-	private
-		FTempDir: string;
+	TTestGeminiWcxExtractSpecial = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 
 		[Test]
 		procedure ExtractEmbeddedHtml_ProducesContent;
@@ -265,9 +245,6 @@ type
 	end;
 
 implementation
-
-uses
-	Tests.GeminiFile.TestUtils;
 
 // ========================================================================
 // TTestGeminiWcxVirtualFileList
@@ -950,40 +927,6 @@ end;
 // TTestGeminiWcxExportedApi
 // ========================================================================
 
-function TTestGeminiWcxExportedApi.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-function TTestGeminiWcxExportedApi.CreateTempFileBytes(const AName: string;
-	const ABytes: TBytes): string;
-var
-	LStream: TFileStream;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	LStream := TFileStream.Create(Result, fmCreate);
-	try
-		if Length(ABytes) > 0 then
-			LStream.WriteBuffer(ABytes[0], Length(ABytes));
-	finally
-		LStream.Free;
-	end;
-end;
-
-procedure TTestGeminiWcxExportedApi.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath,
-		'GemViewTest_WcxApi_' + TGUID.NewGuid.ToString);
-	ForceDirectories(FTempDir);
-end;
-
-procedure TTestGeminiWcxExportedApi.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
-
 procedure TTestGeminiWcxExportedApi.GetPackerCaps_ReturnsCorrectFlags;
 begin
 	Assert.AreEqual<Integer>(
@@ -1510,25 +1453,6 @@ end;
 // TTestGeminiWcxAnsiCompat
 // ========================================================================
 
-function TTestGeminiWcxAnsiCompat.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-procedure TTestGeminiWcxAnsiCompat.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath,
-		'GemViewTest_Ansi_' + TGUID.NewGuid.ToString);
-	ForceDirectories(FTempDir);
-end;
-
-procedure TTestGeminiWcxAnsiCompat.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
-
 procedure TTestGeminiWcxAnsiCompat.OpenArchive_Ansi_ReturnsHandle;
 var
 	LPath: string;
@@ -1740,19 +1664,6 @@ end;
 // ========================================================================
 // TTestGeminiWcxExtractSpecial
 // ========================================================================
-
-procedure TTestGeminiWcxExtractSpecial.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath,
-		'GemViewTest_WcxSpecial_' + TGUID.NewGuid.ToString);
-	ForceDirectories(FTempDir);
-end;
-
-procedure TTestGeminiWcxExtractSpecial.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
 
 procedure TTestGeminiWcxExtractSpecial.ExtractEmbeddedHtml_ProducesContent;
 var

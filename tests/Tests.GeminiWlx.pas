@@ -13,22 +13,16 @@ uses
 	System.IOUtils,
 	Winapi.Windows,
 	DUnitX.TestFramework,
-	GeminiWlx;
+	GeminiWlx,
+	Tests.GeminiFile.TestUtils;
 
 type
 	/// <summary>
 	///   Tests for ScanRoleMarkers: binary scan finding user/model role markers.
 	/// </summary>
 	[TestFixture]
-	TTestWlxScanRoleMarkers = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestWlxScanRoleMarkers = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 		[Test]
 		procedure TwoChunks_ReturnsTwoMarkers;
 		[Test]
@@ -57,15 +51,8 @@ type
 	///   Tests for ExtractFirstUserText: binary scan + JSON escape decoding.
 	/// </summary>
 	[TestFixture]
-	TTestWlxExtractFirstUserText = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestWlxExtractFirstUserText = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 		[Test]
 		procedure SimpleText_ExtractedCorrectly;
 		[Test]
@@ -119,15 +106,12 @@ type
 	///   Verifies HBITMAP validity and dimensions.
 	/// </summary>
 	[TestFixture]
-	TTestWlxThumbnails = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestWlxThumbnails = class(TTempDirTestBase)
 	public
 		[Setup]
-		procedure Setup;
+		procedure Setup; override;
 		[TearDown]
-		procedure TearDown;
+		procedure TearDown; override;
 		[Test]
 		procedure ValidFile_ReturnsNonZeroBitmap;
 		[Test]
@@ -170,16 +154,8 @@ type
 	///   Tests for FindFirstImageBase64: binary search for embedded images.
 	/// </summary>
 	[TestFixture]
-	TTestWlxFindFirstImageBase64 = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
-		function CreateTempFileBytes(const AName: string; const ABytes: TBytes): string;
+	TTestWlxFindFirstImageBase64 = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 		[Test]
 		procedure FileWithInlineImage_ReturnsTrue;
 		[Test]
@@ -201,15 +177,8 @@ type
 	///   and RenderMetadataThumbnail direct calls.
 	/// </summary>
 	[TestFixture]
-	TTestWlxRenderFunctions = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestWlxRenderFunctions = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 		[Test]
 		procedure Stripe_ValidFile_ReturnsNonZeroBitmap;
 		[Test]
@@ -244,15 +213,8 @@ type
 	///   Tests for exported WLX functions that don't require WebView2.
 	/// </summary>
 	[TestFixture]
-	TTestWlxExportedFunctions = class
-	private
-		FTempDir: string;
-		function CreateTempFile(const AName, AContent: string): string;
+	TTestWlxExportedFunctions = class(TTempDirTestBase)
 	public
-		[Setup]
-		procedure Setup;
-		[TearDown]
-		procedure TearDown;
 		[Test]
 		procedure ListGetDetectString_ContainsRunSettings;
 		[Test]
@@ -315,46 +277,7 @@ implementation
 
 uses
 	Winapi.ActiveX,
-	WlxApi,
-	Tests.GeminiFile.TestUtils;
-
-// ========================================================================
-// Helpers
-// ========================================================================
-
-function TTestWlxScanRoleMarkers.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-function TTestWlxExtractFirstUserText.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-function TTestWlxThumbnails.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-// ========================================================================
-// TTestWlxScanRoleMarkers
-// ========================================================================
-
-procedure TTestWlxScanRoleMarkers.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
-end;
-
-procedure TTestWlxScanRoleMarkers.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
+	WlxApi;
 
 procedure TTestWlxScanRoleMarkers.TwoChunks_ReturnsTwoMarkers;
 var
@@ -497,17 +420,7 @@ end;
 // TTestWlxExtractFirstUserText
 // ========================================================================
 
-procedure TTestWlxExtractFirstUserText.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
-end;
-
-procedure TTestWlxExtractFirstUserText.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
+// ExtractFirstUserText inherits Setup/TearDown from TTempDirTestBase
 
 procedure TTestWlxExtractFirstUserText.SimpleText_ExtractedCorrectly;
 var
@@ -668,15 +581,13 @@ end;
 
 procedure TTestWlxThumbnails.Setup;
 begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
+	inherited;
 	CoInitializeEx(nil, COINIT_MULTITHREADED);
 end;
 
 procedure TTestWlxThumbnails.TearDown;
 begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
+	inherited;
 end;
 
 procedure TTestWlxThumbnails.ValidFile_ReturnsNonZeroBitmap;
@@ -972,30 +883,6 @@ end;
 // TTestWlxFindFirstImageBase64
 // ========================================================================
 
-function TTestWlxFindFirstImageBase64.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-function TTestWlxFindFirstImageBase64.CreateTempFileBytes(const AName: string; const ABytes: TBytes): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllBytes(Result, ABytes);
-end;
-
-procedure TTestWlxFindFirstImageBase64.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
-end;
-
-procedure TTestWlxFindFirstImageBase64.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
-
 procedure TTestWlxFindFirstImageBase64.FileWithInlineImage_ReturnsTrue;
 var
 	LFile: string;
@@ -1083,23 +970,7 @@ end;
 // TTestWlxRenderFunctions
 // ========================================================================
 
-function TTestWlxRenderFunctions.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-procedure TTestWlxRenderFunctions.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
-end;
-
-procedure TTestWlxRenderFunctions.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
+// RenderFunctions inherits Setup/TearDown/CreateTempFile from TTempDirTestBase
 
 procedure TTestWlxRenderFunctions.Stripe_ValidFile_ReturnsNonZeroBitmap;
 var
@@ -1336,23 +1207,7 @@ end;
 // TTestWlxExportedFunctions
 // ========================================================================
 
-function TTestWlxExportedFunctions.CreateTempFile(const AName, AContent: string): string;
-begin
-	Result := TPath.Combine(FTempDir, AName);
-	TFile.WriteAllText(Result, AContent, TEncoding.UTF8);
-end;
-
-procedure TTestWlxExportedFunctions.Setup;
-begin
-	FTempDir := TPath.Combine(TPath.GetTempPath, 'wlx_test_' + TGUID.NewGuid.ToString);
-	TDirectory.CreateDirectory(FTempDir);
-end;
-
-procedure TTestWlxExportedFunctions.TearDown;
-begin
-	if TDirectory.Exists(FTempDir) then
-		TDirectory.Delete(FTempDir, True);
-end;
+// ExportedFunctions inherits Setup/TearDown/CreateTempFile from TTempDirTestBase
 
 procedure TTestWlxExportedFunctions.ListGetDetectString_ContainsRunSettings;
 var

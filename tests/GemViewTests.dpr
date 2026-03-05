@@ -28,6 +28,7 @@ uses
   GeminiFile.Markdown in '..\src\GeminiFile.Markdown.pas',
   GeminiFile.Grouping in '..\src\GeminiFile.Grouping.pas',
   WcxApi in '..\wcx\WcxApi.pas',
+  GeminiPlugin.Shared in '..\src\GeminiPlugin.Shared.pas',
   GeminiWcx in '..\wcx\GeminiWcx.pas',
   Tests.GeminiFile.Types in 'Tests.GeminiFile.Types.pas',
   Tests.GeminiFile.Resource in 'Tests.GeminiFile.Resource.pas',
