@@ -95,6 +95,10 @@ type
 		procedure EmptyBlockWithDriveId_SkippedViaHideBlocks;
 		[Test]
 		procedure SourceFileName_IncludedInTitle;
+		[Test]
+		procedure MetadataHeader_IncludesOptionalSettings;
+		[Test]
+		procedure CombinedBlocks_MiddleEmptyDriveId_Skipped;
 	end;
 
 	[TestFixture]
@@ -151,6 +155,10 @@ type
 		procedure ThinkingChunkWithNonThoughtParts_FallsBackToText;
 		[Test]
 		procedure SourceFileName_IncludedInTitle;
+		[Test]
+		procedure MetadataHeader_IncludesOptionalSettings;
+		[Test]
+		procedure CombinedThinkingBlocks_FirstTimestamp;
 	end;
 
 	[TestFixture]
@@ -237,6 +245,8 @@ type
 		procedure CollapseSystemInstruction_EmptyInstruction_NoOutput;
 		[Test]
 		procedure ConfigRecord_AppliesAllSettings;
+		[Test]
+		procedure MetadataHeader_IncludesOptionalSettings;
 	end;
 
 implementation
@@ -623,6 +633,44 @@ begin
 	Assert.Contains(LResult, '=== Gemini Conversation - MyChat ===');
 end;
 
+procedure TTestGeminiTextFormatter.MetadataHeader_IncludesOptionalSettings;
+var
+	LResult: string;
+begin
+	FRunSettings.Model := 'models/gemini-2.5-pro';
+	FRunSettings.Temperature := 0.7;
+	FRunSettings.TopP := 0.95;
+	FRunSettings.TopK := 40;
+	FRunSettings.MaxOutputTokens := 8192;
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, 'TopP: 0.95');
+	Assert.Contains(LResult, 'TopK: 40');
+	Assert.Contains(LResult, 'MaxOutputTokens: 8192');
+end;
+
+procedure TTestGeminiTextFormatter.CombinedBlocks_MiddleEmptyDriveId_Skipped;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	/// Empty middle chunk with DriveImageId should be skipped when combining,
+	/// incrementing the pending remote count instead of producing a visible block
+	FFormatter.CombineBlocks := True;
+	FFormatter.HideEmptyBlocks := True;
+	FChunks.Add(MakeChunk(grUser, 'First message'));
+	LChunk := MakeChunk(grUser, '');
+	LChunk.DriveImageId := 'drive_img_1';
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grUser, 'Third message'));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, 'First message');
+	Assert.Contains(LResult, 'Third message');
+	// Only one [USER] header due to combining
+	var LPos := Pos('[USER]', LResult);
+	var LSecond := Pos('[USER]', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one [USER] header');
+end;
+
 // ========================================================================
 // TTestGeminiMarkdownFormatter
 // ========================================================================
@@ -957,6 +1005,43 @@ begin
 	FFormatter.SourceFileName := 'MyChat';
 	LResult := FormatToString('', nil);
 	Assert.Contains(LResult, '# Gemini Conversation - MyChat');
+end;
+
+procedure TTestGeminiMarkdownFormatter.MetadataHeader_IncludesOptionalSettings;
+var
+	LResult: string;
+begin
+	FRunSettings.Model := 'models/gemini-2.5-pro';
+	FRunSettings.Temperature := 0.7;
+	FRunSettings.TopP := 0.95;
+	FRunSettings.TopK := 40;
+	FRunSettings.MaxOutputTokens := 8192;
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '**TopP:** 0.95');
+	Assert.Contains(LResult, '**TopK:** 40');
+	Assert.Contains(LResult, '**MaxOutputTokens:** 8192');
+end;
+
+procedure TTestGeminiMarkdownFormatter.CombinedThinkingBlocks_FirstTimestamp;
+var
+	LResult: string;
+	LChunk: TGeminiChunk;
+begin
+	/// Combined thinking blocks should use the first chunk's timestamp in the summary
+	FFormatter.CombineBlocks := True;
+	LChunk := MakeChunk(grModel, 'Think A', 0, True);
+	LChunk.CreateTime := EncodeDate(2026, 3, 1) + EncodeTime(10, 30, 0, 0);
+	FChunks.Add(LChunk);
+	FChunks.Add(MakeChunk(grModel, 'Think B', 0, True));
+	LResult := FormatToString('', nil);
+	Assert.Contains(LResult, '2026-03-01 10:30:00');
+	Assert.Contains(LResult, 'Think A');
+	Assert.Contains(LResult, 'Think B');
+	// Only one <details> block for combined thinking
+	var LPos := Pos('<details>', LResult);
+	Assert.IsTrue(LPos > 0, 'Should have a details element');
+	var LSecond := Pos('<details>', LResult, LPos + 1);
+	Assert.AreEqual<Integer>(0, LSecond, 'Should have only one details element');
 end;
 
 // ========================================================================
@@ -1811,6 +1896,21 @@ begin
 	// DefaultExpandThinking: verify open attribute (would appear if thinking blocks existed)
 	// Content is present
 	Assert.Contains(LResult, 'Hello');
+end;
+
+procedure TTestGeminiHtmlFormatter.MetadataHeader_IncludesOptionalSettings;
+var
+	LResult: string;
+begin
+	FRunSettings.Model := 'models/gemini-2.5-pro';
+	FRunSettings.Temperature := 0.7;
+	FRunSettings.TopP := 0.95;
+	FRunSettings.TopK := 40;
+	FRunSettings.MaxOutputTokens := 8192;
+	LResult := FormatToString(False, '', nil);
+	Assert.Contains(LResult, 'TopP:</strong> 0.95');
+	Assert.Contains(LResult, 'TopK:</strong> 40');
+	Assert.Contains(LResult, 'MaxOutputTokens:</strong> 8192');
 end;
 
 initialization

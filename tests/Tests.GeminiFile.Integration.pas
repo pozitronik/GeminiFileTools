@@ -90,6 +90,10 @@ type
     procedure LoadFromFile_LargeFileWithResources_LazyLoadWorks;
     [Test]
     procedure ExtractAllResources_CustomPrefix_UsesPrefix;
+    [Test]
+    procedure LoadFromStream_TopLevelNull_RaisesException;
+    [Test]
+    procedure LoadFromStream_ChunkMissingFields_StillParses;
   end;
 
 implementation
@@ -759,6 +763,57 @@ begin
     LFile.Free;
     if TDirectory.Exists(LOutDir) then
       TDirectory.Delete(LOutDir, True);
+  end;
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_TopLevelNull_RaisesException;
+begin
+  /// Valid JSON 'null' is not a JSON object -- parser should raise EGeminiParseError
+  Assert.WillRaise(
+    procedure
+    var
+      LFile: TGeminiFile;
+      LStream: TStringStream;
+    begin
+      LFile := TGeminiFile.Create;
+      try
+        LStream := TStringStream.Create('null', TEncoding.UTF8);
+        try
+          LFile.LoadFromStream(LStream);
+        finally
+          LStream.Free;
+        end;
+      finally
+        LFile.Free;
+      end;
+    end,
+    EGeminiParseError, '');
+end;
+
+procedure TTestGeminiFileIntegration.LoadFromStream_ChunkMissingFields_StillParses;
+var
+  LFile: TGeminiFile;
+  LStream: TStringStream;
+begin
+  /// Chunk with minimal/unusual structure should still parse without exception;
+  /// exercises ParseChunk error guard paths for missing standard fields
+  LFile := TGeminiFile.Create;
+  try
+    LStream := TStringStream.Create(
+      '{"chunkedPrompt":{"chunks":[' +
+      '{"text":"normal","role":"user"},' +
+      '{"unknownField":"value"},' +
+      '{"text":"after","role":"model"}' +
+      ']}}', TEncoding.UTF8);
+    try
+      LFile.LoadFromStream(LStream);
+    finally
+      LStream.Free;
+    end;
+    Assert.AreEqual<Integer>(3, LFile.ChunkCount,
+      'All chunks including malformed ones should be parsed');
+  finally
+    LFile.Free;
   end;
 end;
 

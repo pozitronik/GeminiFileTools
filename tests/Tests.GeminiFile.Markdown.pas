@@ -80,6 +80,10 @@ type
 		procedure MultipleHeadings_AllRendered;
 		[Test]
 		procedure HeadingWithLeadingWhitespace_StillDetected;
+		[Test]
+		procedure ConsecutiveDoubleNewlines_EmptyParagraphsSkipped;
+		[Test]
+		procedure HeadingOnly_NoTrailingProse;
 	end;
 
 implementation
@@ -379,6 +383,28 @@ begin
 	// Leading spaces should not prevent heading detection
 	LResult := MarkdownToHtml('  ## Indented Heading');
 	Assert.Contains(LResult, '<h2>Indented Heading</h2>');
+end;
+
+procedure TTestMarkdownToHtml.ConsecutiveDoubleNewlines_EmptyParagraphsSkipped;
+var
+	LResult: string;
+begin
+	/// Multiple consecutive blank lines should not produce empty <p></p> tags;
+	/// exercises ProcessProse Trim(LPara)='' Continue path
+	LResult := MarkdownToHtml('para1' + #10#10 + #10#10 + 'para2');
+	Assert.Contains(LResult, '<p>para1</p>');
+	Assert.Contains(LResult, '<p>para2</p>');
+	Assert.IsFalse(LResult.Contains('<p></p>'), 'Empty paragraphs must be skipped');
+end;
+
+procedure TTestMarkdownToHtml.HeadingOnly_NoTrailingProse;
+var
+	LResult: string;
+begin
+	/// A heading with no following text exercises ProcessProse with empty input
+	LResult := MarkdownToHtml('# Just a heading');
+	Assert.AreEqual('<h1>Just a heading</h1>', LResult);
+	Assert.IsFalse(LResult.Contains('<p>'), 'No paragraph tag should appear for heading-only input');
 end;
 
 initialization
