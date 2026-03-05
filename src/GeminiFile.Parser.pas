@@ -170,9 +170,9 @@ var
 	LBytes: TBytes;
 	LJsonStr: string;
 	LRoot: TJSONValue;
+	LVal: TJSONValue;
 	LObj: TJSONObject;
 	LChunkedPrompt: TJSONObject;
-	LChunksArr: TJSONArray;
 	LStart: Integer;
 begin
 	Result := '';
@@ -213,20 +213,21 @@ begin
 		AChunks.Clear;
 
 		// Parse sections
-		if LObj.FindValue('runSettings') is TJSONObject then
-			ParseRunSettings(TJSONObject(LObj.FindValue('runSettings')), ARunSettings);
+		LVal := LObj.FindValue('runSettings');
+		if LVal is TJSONObject then
+			ParseRunSettings(TJSONObject(LVal), ARunSettings);
 
-		if LObj.FindValue('systemInstruction') is TJSONObject then
-			Result := ParseSystemInstruction(TJSONObject(LObj.FindValue('systemInstruction')));
+		LVal := LObj.FindValue('systemInstruction');
+		if LVal is TJSONObject then
+			Result := ParseSystemInstruction(TJSONObject(LVal));
 
-		if LObj.FindValue('chunkedPrompt') is TJSONObject then
+		LVal := LObj.FindValue('chunkedPrompt');
+		if LVal is TJSONObject then
 		begin
-			LChunkedPrompt := TJSONObject(LObj.FindValue('chunkedPrompt'));
-			if LChunkedPrompt.FindValue('chunks') is TJSONArray then
-			begin
-				LChunksArr := TJSONArray(LChunkedPrompt.FindValue('chunks'));
-				ParseChunks(LChunksArr, AChunks);
-			end;
+			LChunkedPrompt := TJSONObject(LVal);
+			LVal := LChunkedPrompt.FindValue('chunks');
+			if LVal is TJSONArray then
+				ParseChunks(TJSONArray(LVal), AChunks);
 		end;
 	finally
 		LRoot.Free;
@@ -235,6 +236,7 @@ end;
 
 procedure TGeminiFileParser.ParseRunSettings(AObj: TJSONObject; ARunSettings: TGeminiRunSettings);
 var
+	LVal: TJSONValue;
 	LSafetyArr: TJSONArray;
 	LModArr: TJSONArray;
 	I: Integer;
@@ -255,9 +257,10 @@ begin
 	ARunSettings.EnableAutoFunctionResponse := JsonBool(AObj, 'enableAutoFunctionResponse');
 
 	// Safety settings array
-	if AObj.FindValue('safetySettings') is TJSONArray then
+	LVal := AObj.FindValue('safetySettings');
+	if LVal is TJSONArray then
 	begin
-		LSafetyArr := TJSONArray(AObj.FindValue('safetySettings'));
+		LSafetyArr := TJSONArray(LVal);
 		SetLength(LSafetySettings, LSafetyArr.Count);
 		for I := 0 to LSafetyArr.Count - 1 do
 		begin
@@ -273,9 +276,10 @@ begin
 	end;
 
 	// Response modalities array
-	if AObj.FindValue('responseModalities') is TJSONArray then
+	LVal := AObj.FindValue('responseModalities');
+	if LVal is TJSONArray then
 	begin
-		LModArr := TJSONArray(AObj.FindValue('responseModalities'));
+		LModArr := TJSONArray(LVal);
 		SetLength(LModalities, LModArr.Count);
 		for I := 0 to LModArr.Count - 1 do
 			if not(LModArr.Items[I] is TJSONNull) then
@@ -306,12 +310,9 @@ end;
 
 function TGeminiFileParser.ParseChunk(AObj: TJSONObject; AIndex: Integer): TGeminiChunk;
 var
+	LVal: TJSONValue;
 	LRoleStr: string;
 	LSafetyArr: TJSONArray;
-	LSigArr: TJSONArray;
-	LPartsArr: TJSONArray;
-	LImgObj: TJSONObject;
-	LDriveObj: TJSONObject;
 	LCreateTimeStr: string;
 	I: Integer;
 	LRating: TGeminiSafetyRating;
@@ -351,23 +352,20 @@ begin
 		end;
 
 		// DriveImage
-		if AObj.FindValue('driveImage') is TJSONObject then
-		begin
-			LDriveObj := TJSONObject(AObj.FindValue('driveImage'));
-			Result.DriveImageId := JsonStr(LDriveObj, 'id');
-		end;
+		LVal := AObj.FindValue('driveImage');
+		if LVal is TJSONObject then
+			Result.DriveImageId := JsonStr(TJSONObject(LVal), 'id');
 
 		// InlineImage (chunk-level)
-		if AObj.FindValue('inlineImage') is TJSONObject then
-		begin
-			LImgObj := TJSONObject(AObj.FindValue('inlineImage'));
-			Result.InlineImage := ParseResource(LImgObj, AIndex);
-		end;
+		LVal := AObj.FindValue('inlineImage');
+		if LVal is TJSONObject then
+			Result.InlineImage := ParseResource(TJSONObject(LVal), AIndex);
 
 		// Safety ratings
-		if AObj.FindValue('safetyRatings') is TJSONArray then
+		LVal := AObj.FindValue('safetyRatings');
+		if LVal is TJSONArray then
 		begin
-			LSafetyArr := TJSONArray(AObj.FindValue('safetyRatings'));
+			LSafetyArr := TJSONArray(LVal);
 			SetLength(LSafetyRatings, LSafetyArr.Count);
 			for I := 0 to LSafetyArr.Count - 1 do
 			begin
@@ -383,21 +381,19 @@ begin
 		end;
 
 		// Thought signatures
-		if AObj.FindValue('thoughtSignatures') is TJSONArray then
+		LVal := AObj.FindValue('thoughtSignatures');
+		if LVal is TJSONArray then
 		begin
-			LSigArr := TJSONArray(AObj.FindValue('thoughtSignatures'));
-			SetLength(LSignatures, LSigArr.Count);
-			for I := 0 to LSigArr.Count - 1 do
-				LSignatures[I] := LSigArr.Items[I].Value;
+			SetLength(LSignatures, TJSONArray(LVal).Count);
+			for I := 0 to TJSONArray(LVal).Count - 1 do
+				LSignatures[I] := TJSONArray(LVal).Items[I].Value;
 			Result.ThoughtSignatures := LSignatures;
 		end;
 
 		// Parts
-		if AObj.FindValue('parts') is TJSONArray then
-		begin
-			LPartsArr := TJSONArray(AObj.FindValue('parts'));
-			ParsePartsInto(LPartsArr, AIndex, Result.Parts);
-		end;
+		LVal := AObj.FindValue('parts');
+		if LVal is TJSONArray then
+			ParsePartsInto(TJSONArray(LVal), AIndex, Result.Parts);
 	except
 		Result.Free;
 		raise;
@@ -407,9 +403,9 @@ end;
 procedure TGeminiFileParser.ParsePartsInto(AArr: TJSONArray; AChunkIndex: Integer; AParts: TObjectList<TGeminiPart>);
 var
 	I: Integer;
+	LVal: TJSONValue;
 	LPartObj: TJSONObject;
 	LPart: TGeminiPart;
-	LInlineObj: TJSONObject;
 begin
 	for I := 0 to AArr.Count - 1 do
 	begin
@@ -423,11 +419,9 @@ begin
 				LPart.ThoughtSignature := JsonStr(LPartObj, 'thoughtSignature');
 
 				// Inline data within a part
-				if LPartObj.FindValue('inlineData') is TJSONObject then
-				begin
-					LInlineObj := TJSONObject(LPartObj.FindValue('inlineData'));
-					LPart.InlineData := ParseResource(LInlineObj, AChunkIndex);
-				end;
+				LVal := LPartObj.FindValue('inlineData');
+				if LVal is TJSONObject then
+					LPart.InlineData := ParseResource(TJSONObject(LVal), AChunkIndex);
 
 				AParts.Add(LPart);
 			except
