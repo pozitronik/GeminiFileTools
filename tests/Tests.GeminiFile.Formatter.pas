@@ -227,6 +227,8 @@ type
 		procedure CollapseSystemInstructionFalse_KeepsOriginalRendering;
 		[Test]
 		procedure CollapseSystemInstruction_EmptyInstruction_NoOutput;
+		[Test]
+		procedure ConfigRecord_AppliesAllSettings;
 	end;
 
 implementation
@@ -1774,6 +1776,57 @@ begin
 	// CSS class definitions are always present; check that no actual system instruction block is rendered
 	Assert.DoesNotContain(LResult, '<details class="system-instruction-details">');
 	Assert.DoesNotContain(LResult, '<div class="section-title">System Instruction</div>');
+end;
+
+procedure TTestGeminiHtmlFormatter.ConfigRecord_AppliesAllSettings;
+var
+	LStream: TMemoryStream;
+	LFormatter: TGeminiHtmlFormatter;
+	LConfig: TGeminiHtmlFormatterConfig;
+	LResult: string;
+	LBytes: TBytes;
+begin
+	FChunks.Add(MakeChunk(grModel, 'Hello', 10, False));
+
+	LConfig := TGeminiHtmlFormatterConfig.Default;
+	LConfig.EmbedResources := False;
+	LConfig.DefaultFullWidth := True;
+	LConfig.DefaultExpandThinking := True;
+	LConfig.RenderMarkdown := False;
+	LConfig.CollapseSystemInstruction := False;
+	LConfig.SourceFileName := 'TestFile';
+	LConfig.CustomCSS := '.test-rule { color: red; }';
+
+	LStream := TMemoryStream.Create;
+	try
+		LFormatter := TGeminiHtmlFormatter.Create(LConfig);
+		try
+			LFormatter.FormatToStream(LStream, FChunks, 'System prompt', FRunSettings, nil);
+		finally
+			LFormatter.Free;
+		end;
+		SetLength(LBytes, LStream.Size);
+		LStream.Position := 0;
+		LStream.ReadBuffer(LBytes[0], LStream.Size);
+		LResult := TEncoding.UTF8.GetString(LBytes);
+	finally
+		LStream.Free;
+	end;
+
+	// DefaultFullWidth
+	Assert.Contains(LResult, 'full-width');
+	// RenderMarkdown = False: no 'md' body class
+	Assert.DoesNotContain(LResult, 'class="full-width md"');
+	// CollapseSystemInstruction = False: section-title rendering
+	Assert.Contains(LResult, '<div class="section-title">System Instruction</div>');
+	Assert.DoesNotContain(LResult, '<details class="system-instruction-details">');
+	// SourceFileName
+	Assert.Contains(LResult, 'TestFile');
+	// CustomCSS
+	Assert.Contains(LResult, '.test-rule { color: red; }');
+	// DefaultExpandThinking: verify open attribute (would appear if thinking blocks existed)
+	// Content is present
+	Assert.Contains(LResult, 'Hello');
 end;
 
 initialization

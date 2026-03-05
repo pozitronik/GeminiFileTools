@@ -503,10 +503,10 @@ var
 	LGeminiFile: TGeminiFile;
 	LResources: TArray<TGeminiResource>;
 	LResourceInfos: TArray<TFormatterResourceInfo>;
-	LHtmlFmt: TGeminiHtmlFormatter;
 	LFmt: IGeminiFormatter;
 	LStream: TMemoryStream;
 	LConfig: TListerConfig;
+	LHtmlConfig: TGeminiHtmlFormatterConfig;
 	LTempPath: string;
 	I: Integer;
 begin
@@ -525,15 +525,17 @@ begin
 			LResourceInfos[I].Base64Data := LResources[I].Base64Data;
 
 		// Generate embedded HTML
-		LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
-		LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(AFileName);
-		LHtmlFmt.HideEmptyBlocks := LConfig.HideEmptyBlocks;
-		LHtmlFmt.CombineBlocks := LConfig.CombineBlocks;
-		LHtmlFmt.RenderMarkdown := LConfig.RenderMarkdown;
-		LHtmlFmt.DefaultFullWidth := LConfig.DefaultFullWidth;
-		LHtmlFmt.DefaultExpandThinking := LConfig.DefaultExpandThinking;
-		LHtmlFmt.CollapseSystemInstruction := LConfig.CollapseSystemInstruction;
-		LFmt := LHtmlFmt;
+		LHtmlConfig := TGeminiHtmlFormatterConfig.Default;
+		LHtmlConfig.EmbedResources := True;
+		LHtmlConfig.SourceFileName := TPath.GetFileNameWithoutExtension(AFileName);
+		LHtmlConfig.CustomCSS := GetCustomCSS;
+		LHtmlConfig.HideEmptyBlocks := LConfig.HideEmptyBlocks;
+		LHtmlConfig.CombineBlocks := LConfig.CombineBlocks;
+		LHtmlConfig.RenderMarkdown := LConfig.RenderMarkdown;
+		LHtmlConfig.DefaultFullWidth := LConfig.DefaultFullWidth;
+		LHtmlConfig.DefaultExpandThinking := LConfig.DefaultExpandThinking;
+		LHtmlConfig.CollapseSystemInstruction := LConfig.CollapseSystemInstruction;
+		LFmt := TGeminiHtmlFormatter.Create(LHtmlConfig);
 
 		LStream := TMemoryStream.Create;
 		try

@@ -327,15 +327,19 @@ begin
 	end;
 end;
 
-/// <summary>Applies plugin config settings to an HTML formatter instance.</summary>
-procedure ConfigureHtmlFormatter(AFormatter: TGeminiHtmlFormatter; const AConfig: TPluginConfig);
+/// <summary>Builds an HTML formatter config from plugin config and custom CSS.</summary>
+function BuildHtmlConfig(const AConfig: TPluginConfig; AEmbedResources: Boolean; const ASourceFileName, ACustomCSS: string): TGeminiHtmlFormatterConfig;
 begin
-	AFormatter.HideEmptyBlocks := AConfig.HideEmptyBlocksHtml;
-	AFormatter.DefaultFullWidth := AConfig.DefaultFullWidth;
-	AFormatter.DefaultExpandThinking := AConfig.DefaultExpandThinking;
-	AFormatter.RenderMarkdown := AConfig.RenderMarkdown;
-	AFormatter.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
-	AFormatter.CombineBlocks := AConfig.CombineBlocksHtml;
+	Result := TGeminiHtmlFormatterConfig.Default;
+	Result.EmbedResources := AEmbedResources;
+	Result.HideEmptyBlocks := AConfig.HideEmptyBlocksHtml;
+	Result.DefaultFullWidth := AConfig.DefaultFullWidth;
+	Result.DefaultExpandThinking := AConfig.DefaultExpandThinking;
+	Result.RenderMarkdown := AConfig.RenderMarkdown;
+	Result.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	Result.CombineBlocks := AConfig.CombineBlocksHtml;
+	Result.SourceFileName := ASourceFileName;
+	Result.CustomCSS := ACustomCSS;
 end;
 
 function TGeminiArchive.FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
@@ -355,7 +359,6 @@ procedure TGeminiArchive.CacheFormattedContent;
 var
 	LTextFmt: TGeminiTextFormatter;
 	LMdFmt: TGeminiMarkdownFormatter;
-	LHtmlFmt: TGeminiHtmlFormatter;
 	LFmt: IGeminiFormatter;
 	LConfig: TPluginConfig;
 begin
@@ -378,10 +381,7 @@ begin
 	FCachedMarkdown := FormatToBytes(LFmt);
 
 	// HTML (external resources)
-	LHtmlFmt := TGeminiHtmlFormatter.Create(False, GetCustomCSS);
-	LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
-	ConfigureHtmlFormatter(LHtmlFmt, LConfig);
-	LFmt := LHtmlFmt;
+	LFmt := TGeminiHtmlFormatter.Create(BuildHtmlConfig(LConfig, False, TPath.GetFileNameWithoutExtension(FFileName), GetCustomCSS));
 	FCachedHtml := FormatToBytes(LFmt);
 end;
 
@@ -517,7 +517,6 @@ end;
 function TGeminiArchive.ExtractVirtualFile(const AEntry: TVirtualFileEntry; const ADestPath: string): Integer;
 var
 	LDir: string;
-	LHtmlFmt: TGeminiHtmlFormatter;
 	LFmt: IGeminiFormatter;
 	LConfig: TPluginConfig;
 	I: Integer;
@@ -545,10 +544,7 @@ begin
 
 				// Generate on-demand (can be large)
 				LConfig := GetPluginConfig;
-				LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);
-				LHtmlFmt.SourceFileName := TPath.GetFileNameWithoutExtension(FFileName);
-				ConfigureHtmlFormatter(LHtmlFmt, LConfig);
-				LFmt := LHtmlFmt;
+				LFmt := TGeminiHtmlFormatter.Create(BuildHtmlConfig(LConfig, True, TPath.GetFileNameWithoutExtension(FFileName), GetCustomCSS));
 				Result := WriteBytesToFile(FormatToBytes(LFmt), ADestPath);
 
 				// Release base64 data to free memory

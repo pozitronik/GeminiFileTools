@@ -19,8 +19,36 @@ uses
 
 type
 	/// <summary>
+	///   Bundles all HTML formatter options into a single value type.
+	///   Plugins build this from INI config; the formatter reads it once at construction.
+	///   Adding a new option requires changes only here and in the formatter constructor.
+	/// </summary>
+	TGeminiHtmlFormatterConfig = record
+		/// <summary>True to embed base64 images as data: URIs; False for external file links.</summary>
+		EmbedResources: Boolean;
+		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
+		DefaultFullWidth: Boolean;
+		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
+		DefaultExpandThinking: Boolean;
+		/// <summary>When True, Markdown in model output is rendered as HTML.</summary>
+		RenderMarkdown: Boolean;
+		/// <summary>When True, system instruction is wrapped in a collapsible details element.</summary>
+		CollapseSystemInstruction: Boolean;
+		/// <summary>When True, empty blocks are skipped and remote attachment hints shown.</summary>
+		HideEmptyBlocks: Boolean;
+		/// <summary>When True, consecutive same-kind chunks merge into a single visual block.</summary>
+		CombineBlocks: Boolean;
+		/// <summary>Source file name shown in the document title.</summary>
+		SourceFileName: string;
+		/// <summary>Optional CSS appended after built-in styles for user overrides.</summary>
+		CustomCSS: string;
+		/// <summary>Returns a config with sensible defaults matching the formatter's original behavior.</summary>
+		class function Default: TGeminiHtmlFormatterConfig; static;
+	end;
+
+	/// <summary>
 	///   Formats a Gemini conversation as HTML.
-	///   When AEmbedResources is True, images use data: URIs with base64 content.
+	///   When EmbedResources is True, images use data: URIs with base64 content.
 	///   When False, images reference external files via relative paths.
 	/// </summary>
 	TGeminiHtmlFormatter = class(TGeminiFormatterBase)
@@ -54,10 +82,13 @@ type
 		procedure BeginContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); override;
 		procedure EndContentSubBlock(AOutput: TStream; AUseCombinedLayout: Boolean); override;
 	public
-		/// <summary>Creates an HTML formatter.</summary>
+		/// <summary>Creates an HTML formatter with individual parameters (for tests and simple use).</summary>
 		/// <param name="AEmbedResources">True to embed base64 images, False for external links.</param>
 		/// <param name="ACustomCSS">Optional CSS appended after built-in styles for user overrides.</param>
-		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = '');
+		constructor Create(AEmbedResources: Boolean = False; const ACustomCSS: string = ''); overload;
+		/// <summary>Creates an HTML formatter from a config record (for plugins).</summary>
+		/// <param name="AConfig">Configuration record with all formatter options.</param>
+		constructor Create(const AConfig: TGeminiHtmlFormatterConfig); overload;
 		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
 		property DefaultFullWidth: Boolean read FDefaultFullWidth write FDefaultFullWidth;
 		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
@@ -142,6 +173,20 @@ const
 
 	CSS_STYLES = CSS_BASE + CSS_MESSAGES + CSS_RESOURCES + CSS_CONTROLS + CSS_MARKDOWN + CSS_COMBINED;
 
+	{TGeminiHtmlFormatterConfig}
+
+class function TGeminiHtmlFormatterConfig.Default: TGeminiHtmlFormatterConfig;
+begin
+	Result := System.Default(TGeminiHtmlFormatterConfig);
+	Result.EmbedResources := False;
+	Result.DefaultFullWidth := False;
+	Result.DefaultExpandThinking := False;
+	Result.RenderMarkdown := True;
+	Result.CollapseSystemInstruction := True;
+	Result.HideEmptyBlocks := True;
+	Result.CombineBlocks := False;
+end;
+
 	{TGeminiHtmlFormatter}
 
 	/// <summary>Writes an img tag (embedded or external) plus resource-info div.</summary>
@@ -165,6 +210,20 @@ begin
 	FRenderMarkdown := True;
 	FCollapseSystemInstruction := True;
 	FCustomCSS := ACustomCSS;
+end;
+
+constructor TGeminiHtmlFormatter.Create(const AConfig: TGeminiHtmlFormatterConfig);
+begin
+	inherited Create;
+	FEmbedResources := AConfig.EmbedResources;
+	FDefaultFullWidth := AConfig.DefaultFullWidth;
+	FDefaultExpandThinking := AConfig.DefaultExpandThinking;
+	FRenderMarkdown := AConfig.RenderMarkdown;
+	FCollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	FCustomCSS := AConfig.CustomCSS;
+	HideEmptyBlocks := AConfig.HideEmptyBlocks;
+	CombineBlocks := AConfig.CombineBlocks;
+	SourceFileName := AConfig.SourceFileName;
 end;
 
 procedure TGeminiHtmlFormatter.WriteContentDiv(AOutput: TStream; const AText: string);
