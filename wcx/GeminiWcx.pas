@@ -63,8 +63,6 @@ type
 		FChangeVolProc: TChangeVolProcW;
 		procedure AddVirtualFile(const APath: string; AKind: TVirtualFileKind; ASize: Int64; AResourceIndex: Integer = -1);
 		procedure BuildVirtualFileList;
-		procedure BuildResourceInfos;
-		function IsThinkingResource(AChunkIndex: Integer): Boolean;
 		procedure CacheFormattedContent;
 		/// <summary>Formats a conversation using the given formatter and returns the result as bytes.</summary>
 		function FormatToBytes(const AFormatter: IGeminiFormatter): TBytes;
@@ -306,7 +304,7 @@ begin
 	FGeminiFile.LoadFromFile(AFileName);
 
 	FResources := FGeminiFile.GetResources;
-	BuildResourceInfos;
+	FResourceInfos := BuildFormatterResourceInfos(FResources, FGeminiFile.Chunks);
 	CacheFormattedContent;
 	BuildVirtualFileList;
 end;
@@ -326,42 +324,6 @@ begin
 	begin
 		AStream.Position := 0;
 		AStream.ReadBuffer(Result[0], AStream.Size);
-	end;
-end;
-
-/// <summary>
-///   Returns True if the chunk at the given index is a thinking chunk.
-///   Uses direct index lookup (ChunkIndex = array position).
-/// </summary>
-function TGeminiArchive.IsThinkingResource(AChunkIndex: Integer): Boolean;
-begin
-	if (AChunkIndex >= 0) and (AChunkIndex < FGeminiFile.Chunks.Count) then
-		Result := FGeminiFile.Chunks[AChunkIndex].IsThought
-	else
-		Result := False;
-end;
-
-procedure TGeminiArchive.BuildResourceInfos;
-var
-	I: Integer;
-	LPadWidth: Integer;
-	LSubDir: string;
-begin
-	SetLength(FResourceInfos, Length(FResources));
-	LPadWidth := ResourcePadWidth(Length(FResources));
-
-	for I := 0 to High(FResources) do
-	begin
-		FResourceInfos[I].IsThinking := IsThinkingResource(FResources[I].ChunkIndex);
-		if FResourceInfos[I].IsThinking then
-			LSubDir := 'resources/think/'
-		else
-			LSubDir := 'resources/';
-		FResourceInfos[I].FileName := Format(LSubDir + 'resource_%.*d%s', [LPadWidth, I, FResources[I].GetFileExtension]);
-		FResourceInfos[I].MimeType := FResources[I].MimeType;
-		FResourceInfos[I].Base64Data := ''; // deferred: loaded on demand for embedded HTML
-		FResourceInfos[I].DecodedSize := FResources[I].DecodedSize;
-		FResourceInfos[I].ChunkIndex := FResources[I].ChunkIndex;
 	end;
 end;
 

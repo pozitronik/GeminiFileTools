@@ -508,7 +508,7 @@ var
 	LStream: TMemoryStream;
 	LConfig: TListerConfig;
 	LTempPath: string;
-	I, LPadWidth: Integer;
+	I: Integer;
 begin
 	Result := '';
 	LConfig := GetListerConfig;
@@ -518,21 +518,11 @@ begin
 		LGeminiFile.LoadFromFile(AFileName);
 
 		LResources := LGeminiFile.GetResources;
+		LResourceInfos := BuildFormatterResourceInfos(LResources, LGeminiFile.Chunks);
 
-		// Build resource infos with base64 data for embedded mode
-		SetLength(LResourceInfos, Length(LResources));
-		LPadWidth := ResourcePadWidth(Length(LResources));
+		// Populate base64 data for embedded mode
 		for I := 0 to High(LResources) do
-		begin
-			LResourceInfos[I].FileName := Format('resources/resource_%.*d%s', [LPadWidth, I, LResources[I].GetFileExtension]);
-			LResourceInfos[I].MimeType := LResources[I].MimeType;
 			LResourceInfos[I].Base64Data := LResources[I].Base64Data;
-			LResourceInfos[I].DecodedSize := LResources[I].DecodedSize;
-			LResourceInfos[I].ChunkIndex := LResources[I].ChunkIndex;
-			LResourceInfos[I].IsThinking := False;
-			if LResources[I].ChunkIndex < LGeminiFile.Chunks.Count then
-				LResourceInfos[I].IsThinking := LGeminiFile.Chunks[LResources[I].ChunkIndex].IsThought;
-		end;
 
 		// Generate embedded HTML
 		LHtmlFmt := TGeminiHtmlFormatter.Create(True, GetCustomCSS);

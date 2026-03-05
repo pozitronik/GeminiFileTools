@@ -1,13 +1,16 @@
 /// <summary>
-///   Unit tests for GeminiFile.Types: MimeToExtension and FormatByteSize.
+///   Unit tests for GeminiFile.Types and BuildFormatterResourceInfos.
 /// </summary>
 unit Tests.GeminiFile.Types;
 
 interface
 
 uses
+  System.Generics.Collections,
   DUnitX.TestFramework,
-  GeminiFile.Types;
+  GeminiFile.Types,
+  GeminiFile.Model,
+  GeminiFile;
 
 type
   [TestFixture]
@@ -87,6 +90,29 @@ type
     procedure ResourcePadWidth_SmallCount_ReturnsMinimum3;
     [Test]
     procedure ResourcePadWidth_LargeCount_ReturnsDigitCount;
+  end;
+
+  [TestFixture]
+  TTestBuildFormatterResourceInfos = class
+  private
+    FChunks: TObjectList<TGeminiChunk>;
+  public
+    [Setup]
+    procedure Setup;
+    [TearDown]
+    procedure TearDown;
+    [Test]
+    procedure EmptyResources_ReturnsEmptyArray;
+    [Test]
+    procedure SingleResource_CorrectFields;
+    [Test]
+    procedure ThinkingResource_GetsThinkSubdir;
+    [Test]
+    procedure NonThinkingResource_GetsResourcesDir;
+    [Test]
+    procedure Base64Data_AlwaysEmpty;
+    [Test]
+    procedure OutOfBoundsChunkIndex_NotThinking;
   end;
 
 implementation
@@ -301,7 +327,147 @@ begin
   Assert.AreEqual<Integer>(5, ResourcePadWidth(10000));
 end;
 
+// ========================================================================
+// TTestBuildFormatterResourceInfos
+// ========================================================================
+
+procedure TTestBuildFormatterResourceInfos.Setup;
+begin
+  FChunks := TObjectList<TGeminiChunk>.Create(True);
+end;
+
+procedure TTestBuildFormatterResourceInfos.TearDown;
+begin
+  FChunks.Free;
+end;
+
+procedure TTestBuildFormatterResourceInfos.EmptyResources_ReturnsEmptyArray;
+var
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  LResult := BuildFormatterResourceInfos(nil, FChunks);
+  Assert.AreEqual<Integer>(0, Length(LResult));
+end;
+
+procedure TTestBuildFormatterResourceInfos.SingleResource_CorrectFields;
+var
+  LChunk: TGeminiChunk;
+  LRes: TGeminiResource;
+  LResources: TArray<TGeminiResource>;
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  LChunk := TGeminiChunk.Create;
+  LChunk.Role := grModel;
+  FChunks.Add(LChunk);
+
+  LRes := TGeminiResource.Create('image/png', 'AAAA', 0);
+  LResources := TArray<TGeminiResource>.Create(LRes);
+
+  LResult := BuildFormatterResourceInfos(LResources, FChunks);
+  try
+    Assert.AreEqual<Integer>(1, Length(LResult));
+    Assert.AreEqual('image/png', LResult[0].MimeType);
+    Assert.AreEqual<Integer>(0, LResult[0].ChunkIndex);
+    Assert.IsTrue(LResult[0].FileName.Contains('resource_000'));
+    Assert.IsTrue(LResult[0].FileName.EndsWith('.png'));
+  finally
+    LRes.Free;
+  end;
+end;
+
+procedure TTestBuildFormatterResourceInfos.ThinkingResource_GetsThinkSubdir;
+var
+  LChunk: TGeminiChunk;
+  LRes: TGeminiResource;
+  LResources: TArray<TGeminiResource>;
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  LChunk := TGeminiChunk.Create;
+  LChunk.Role := grModel;
+  LChunk.IsThought := True;
+  FChunks.Add(LChunk);
+
+  LRes := TGeminiResource.Create('image/png', 'AAAA', 0);
+  LResources := TArray<TGeminiResource>.Create(LRes);
+
+  LResult := BuildFormatterResourceInfos(LResources, FChunks);
+  try
+    Assert.IsTrue(LResult[0].FileName.StartsWith('resources/think/'),
+      'Thinking resource should have think/ subdirectory');
+    Assert.IsTrue(LResult[0].IsThinking);
+  finally
+    LRes.Free;
+  end;
+end;
+
+procedure TTestBuildFormatterResourceInfos.NonThinkingResource_GetsResourcesDir;
+var
+  LChunk: TGeminiChunk;
+  LRes: TGeminiResource;
+  LResources: TArray<TGeminiResource>;
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  LChunk := TGeminiChunk.Create;
+  LChunk.Role := grModel;
+  FChunks.Add(LChunk);
+
+  LRes := TGeminiResource.Create('image/jpeg', 'AAAA', 0);
+  LResources := TArray<TGeminiResource>.Create(LRes);
+
+  LResult := BuildFormatterResourceInfos(LResources, FChunks);
+  try
+    Assert.IsTrue(LResult[0].FileName.StartsWith('resources/resource_'),
+      'Non-thinking resource should be in resources/ directly');
+    Assert.IsFalse(LResult[0].IsThinking);
+  finally
+    LRes.Free;
+  end;
+end;
+
+procedure TTestBuildFormatterResourceInfos.Base64Data_AlwaysEmpty;
+var
+  LChunk: TGeminiChunk;
+  LRes: TGeminiResource;
+  LResources: TArray<TGeminiResource>;
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  LChunk := TGeminiChunk.Create;
+  FChunks.Add(LChunk);
+
+  LRes := TGeminiResource.Create('image/png', 'SomeLargeBase64Data', 0);
+  LResources := TArray<TGeminiResource>.Create(LRes);
+
+  LResult := BuildFormatterResourceInfos(LResources, FChunks);
+  try
+    Assert.AreEqual('', LResult[0].Base64Data,
+      'Base64Data should always be empty (loaded on demand by caller)');
+  finally
+    LRes.Free;
+  end;
+end;
+
+procedure TTestBuildFormatterResourceInfos.OutOfBoundsChunkIndex_NotThinking;
+var
+  LRes: TGeminiResource;
+  LResources: TArray<TGeminiResource>;
+  LResult: TArray<TFormatterResourceInfo>;
+begin
+  // Chunk index 99 but empty chunk list
+  LRes := TGeminiResource.Create('image/png', 'AAAA', 99);
+  LResources := TArray<TGeminiResource>.Create(LRes);
+
+  LResult := BuildFormatterResourceInfos(LResources, FChunks);
+  try
+    Assert.IsFalse(LResult[0].IsThinking,
+      'Out-of-bounds chunk index should default to non-thinking');
+    Assert.IsTrue(LResult[0].FileName.StartsWith('resources/resource_'));
+  finally
+    LRes.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TTestGeminiFileTypes);
+  TDUnitX.RegisterTestFixture(TTestBuildFormatterResourceInfos);
 
 end.

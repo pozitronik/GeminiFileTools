@@ -38,6 +38,20 @@ type
 	IGeminiFileParser = GeminiFile.Parser.IGeminiFileParser;
 	IGeminiResourceExtractor = GeminiFile.Extractor.IGeminiResourceExtractor;
 
+/// <summary>
+///   Builds a TFormatterResourceInfo array from resources and chunks.
+///   Thinking resources get a 'resources/think/' subdirectory prefix;
+///   normal resources get 'resources/'. Base64Data is left empty (loaded on demand).
+///   Shared by WCX and WLX plugins to avoid duplicated logic.
+/// </summary>
+/// <param name="AResources">Flat array of resources from TGeminiFile.GetResources.</param>
+/// <param name="AChunks">Chunk list for IsThought lookup.</param>
+/// <returns>Array of resource info records ready for formatters.</returns>
+function BuildFormatterResourceInfos(
+	const AResources: TArray<GeminiFile.Model.TGeminiResource>;
+	AChunks: TObjectList<GeminiFile.Model.TGeminiChunk>): TArray<GeminiFile.Types.TFormatterResourceInfo>;
+
+type
 	/// <summary>
 	///   Top-level container for a Gemini conversation file.
 	///   Thin facade delegating to parser and extractor.
@@ -319,6 +333,38 @@ begin
 	Result := 0;
 	for LChunk in FChunks do
 		Inc(Result, LChunk.TokenCount);
+end;
+
+function BuildFormatterResourceInfos(
+	const AResources: TArray<GeminiFile.Model.TGeminiResource>;
+	AChunks: TObjectList<GeminiFile.Model.TGeminiChunk>): TArray<GeminiFile.Types.TFormatterResourceInfo>;
+var
+	I, LPadWidth: Integer;
+	LIsThinking: Boolean;
+	LSubDir: string;
+begin
+	SetLength(Result, Length(AResources));
+	LPadWidth := ResourcePadWidth(Length(AResources));
+
+	for I := 0 to High(AResources) do
+	begin
+		LIsThinking := (AResources[I].ChunkIndex >= 0)
+			and (AResources[I].ChunkIndex < AChunks.Count)
+			and AChunks[AResources[I].ChunkIndex].IsThought;
+
+		if LIsThinking then
+			LSubDir := 'resources/think/'
+		else
+			LSubDir := 'resources/';
+
+		Result[I].FileName := Format(LSubDir + 'resource_%.*d%s',
+			[LPadWidth, I, AResources[I].GetFileExtension]);
+		Result[I].MimeType := AResources[I].MimeType;
+		Result[I].Base64Data := '';
+		Result[I].DecodedSize := AResources[I].DecodedSize;
+		Result[I].ChunkIndex := AResources[I].ChunkIndex;
+		Result[I].IsThinking := LIsThinking;
+	end;
 end;
 
 end.
