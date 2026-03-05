@@ -76,30 +76,48 @@ end;
 function HtmlEscape(const AStr: string): string;
 var
 	LSB: TStringBuilder;
-	I: Integer;
-	LCh: Char;
+	I, LRunStart: Integer;
+	LNeedsEscape: Boolean;
 begin
 	if AStr = '' then
 		Exit('');
 
-	LSB := TStringBuilder.Create(Length(AStr) + Length(AStr) div 8);
-	try
-		for I := 1 to Length(AStr) do
-		begin
-			LCh := AStr[I];
-			case LCh of
-				'&':
-					LSB.Append('&amp;');
-				'<':
-					LSB.Append('&lt;');
-				'>':
-					LSB.Append('&gt;');
-				'"':
-					LSB.Append('&quot;');
-				else
-					LSB.Append(LCh);
+	// Fast path: scan for special chars; return original string if none found
+	LNeedsEscape := False;
+	for I := 1 to Length(AStr) do
+		case AStr[I] of
+			'&', '<', '>', '"':
+			begin
+				LNeedsEscape := True;
+				Break;
 			end;
 		end;
+	if not LNeedsEscape then
+		Exit(AStr);
+
+	// Batch-append runs of non-special characters to minimize Append calls
+	LSB := TStringBuilder.Create(Length(AStr) + Length(AStr) div 8);
+	try
+		LRunStart := 1;
+		for I := 1 to Length(AStr) do
+		begin
+			case AStr[I] of
+				'&', '<', '>', '"':
+				begin
+					if I > LRunStart then
+						LSB.Append(AStr, LRunStart - 1, I - LRunStart);
+					case AStr[I] of
+						'&': LSB.Append('&amp;');
+						'<': LSB.Append('&lt;');
+						'>': LSB.Append('&gt;');
+						'"': LSB.Append('&quot;');
+					end;
+					LRunStart := I + 1;
+				end;
+			end;
+		end;
+		if LRunStart <= Length(AStr) then
+			LSB.Append(AStr, LRunStart - 1, Length(AStr) - LRunStart + 1);
 		Result := LSB.ToString;
 	finally
 		LSB.Free;
