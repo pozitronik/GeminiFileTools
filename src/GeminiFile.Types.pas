@@ -98,47 +98,43 @@ function ResourcePadWidth(ACount: Integer): Integer;
 
 implementation
 
+type
+	TMimeMapping = record
+		Mime: string;
+		Ext: string;
+	end;
+
+const
+	MIME_MAP: array [0 .. 16] of TMimeMapping = (
+		(Mime: 'image/jpeg'; Ext: '.jpg'),
+		(Mime: 'image/png'; Ext: '.png'),
+		(Mime: 'image/gif'; Ext: '.gif'),
+		(Mime: 'image/webp'; Ext: '.webp'),
+		(Mime: 'image/bmp'; Ext: '.bmp'),
+		(Mime: 'image/svg+xml'; Ext: '.svg'),
+		(Mime: 'image/tiff'; Ext: '.tiff'),
+		(Mime: 'audio/mpeg'; Ext: '.mp3'),
+		(Mime: 'audio/wav'; Ext: '.wav'),
+		(Mime: 'audio/ogg'; Ext: '.ogg'),
+		(Mime: 'video/mp4'; Ext: '.mp4'),
+		(Mime: 'video/webm'; Ext: '.webm'),
+		(Mime: 'application/pdf'; Ext: '.pdf'),
+		(Mime: 'application/json'; Ext: '.json'),
+		(Mime: 'text/plain'; Ext: '.txt'),
+		(Mime: 'text/html'; Ext: '.html'),
+		(Mime: 'text/csv'; Ext: '.csv')
+	);
+
 function MimeToExtension(const AMimeType: string): string;
 var
 	LLower: string;
+	I: Integer;
 begin
 	LLower := LowerCase(AMimeType);
-	if LLower = 'image/jpeg' then
-		Result := '.jpg'
-	else if LLower = 'image/png' then
-		Result := '.png'
-	else if LLower = 'image/gif' then
-		Result := '.gif'
-	else if LLower = 'image/webp' then
-		Result := '.webp'
-	else if LLower = 'image/bmp' then
-		Result := '.bmp'
-	else if LLower = 'image/svg+xml' then
-		Result := '.svg'
-	else if LLower = 'image/tiff' then
-		Result := '.tiff'
-	else if LLower = 'audio/mpeg' then
-		Result := '.mp3'
-	else if LLower = 'audio/wav' then
-		Result := '.wav'
-	else if LLower = 'audio/ogg' then
-		Result := '.ogg'
-	else if LLower = 'video/mp4' then
-		Result := '.mp4'
-	else if LLower = 'video/webm' then
-		Result := '.webm'
-	else if LLower = 'application/pdf' then
-		Result := '.pdf'
-	else if LLower = 'application/json' then
-		Result := '.json'
-	else if LLower = 'text/plain' then
-		Result := '.txt'
-	else if LLower = 'text/html' then
-		Result := '.html'
-	else if LLower = 'text/csv' then
-		Result := '.csv'
-	else
-		Result := '.bin';
+	for I := Low(MIME_MAP) to High(MIME_MAP) do
+		if MIME_MAP[I].Mime = LLower then
+			Exit(MIME_MAP[I].Ext);
+	Result := '.bin';
 end;
 
 function FindResourceForChunk(const AResources: TArray<TFormatterResourceInfo>; AChunkIndex: Integer; out AInfo: TFormatterResourceInfo): Boolean;
