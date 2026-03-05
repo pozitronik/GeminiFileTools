@@ -233,17 +233,13 @@ var
 	I: Integer;
 	LPara: string;
 	LSB: TStringBuilder;
-	LNormalized: string;
 begin
 	if AText = '' then
 		Exit('');
 
-	// Normalize line endings to LF for consistent splitting
-	LNormalized := StringReplace(AText, #13#10, #10, [rfReplaceAll]);
-	LNormalized := StringReplace(LNormalized, #13, #10, [rfReplaceAll]);
-
+	// Line endings already normalized by MarkdownToHtml before calling this function
 	// Split on double newlines into paragraphs
-	LParagraphs := SplitString(LNormalized, #10#10);
+	LParagraphs := SplitString(AText, #10#10);
 
 	LSB := TStringBuilder.Create;
 	try
