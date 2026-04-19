@@ -216,7 +216,7 @@ const
 	DEF_DefaultFullWidth = False;
 	DEF_DefaultExpandThinking = False;
 	DEF_CollapseSystemInstruction = True;
-	DEF_AllowContextMenu = False;
+	DEF_AllowContextMenu = True;
 	DEF_AllowDevTools = False;
 	DEF_ThumbnailFallback = 'text';
 

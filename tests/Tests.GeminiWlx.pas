@@ -143,7 +143,7 @@ type
 		[Test]
 		procedure DefaultExpandThinking_IsFalse;
 		[Test]
-		procedure DefaultAllowContextMenu_IsFalse;
+		procedure DefaultAllowContextMenu_IsTrue;
 		[Test]
 		procedure DefaultAllowDevTools_IsFalse;
 		[Test]
@@ -854,12 +854,12 @@ begin
 	Assert.IsFalse(LConfig.DefaultExpandThinking);
 end;
 
-procedure TTestWlxConfig.DefaultAllowContextMenu_IsFalse;
+procedure TTestWlxConfig.DefaultAllowContextMenu_IsTrue;
 var
 	LConfig: TListerConfig;
 begin
 	LConfig := GetListerConfig;
-	Assert.IsFalse(LConfig.AllowContextMenu);
+	Assert.IsTrue(LConfig.AllowContextMenu);
 end;
 
 procedure TTestWlxConfig.DefaultAllowDevTools_IsFalse;
