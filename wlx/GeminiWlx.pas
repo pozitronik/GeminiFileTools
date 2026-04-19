@@ -116,10 +116,14 @@ type
 
 	/// <summary>
 	///   Receives string messages posted from page JS via window.chrome.webview.postMessage.
-	///   Used to persist UI state (thinking mode) back to gemini.ini.
+	///   Used to persist UI state back to gemini.ini and to relay scroll position
+	///   to the Total Commander parent window for the lister percentage indicator.
 	/// </summary>
 	TWebMessageReceivedHandler = class(TInterfacedObject, ICoreWebView2WebMessageReceivedEventHandler)
+	private
+		FPluginWin: HWND;
 	public
+		constructor Create(APluginWin: HWND);
 		function Invoke(const sender: ICoreWebView2; const args: ICoreWebView2WebMessageReceivedEventArgs): HResult; stdcall;
 	end;
 
@@ -252,6 +256,7 @@ const
 	WLX_CONTROL_JS =
 		'(function(){' +
 		'var s=window.__geminiState||{thinkingMode:0};' +
+		'var lastPct=-1,scrollPending=false;' +
 		'function post(m){try{window.chrome.webview.postMessage(m);}catch(e){}}' +
 		'function labelFor(m){return m===0?''Hide thinking'':m===2?''Expand thinking'':''Collapse thinking'';}' +
 		'function nextMode(m){return m===0?2:m===2?1:0;}' +
@@ -260,6 +265,14 @@ const
 		'document.body.classList.toggle(''thinking-hidden'',h);' +
 		'if(!h){var ds=document.querySelectorAll(''details.thinking'');for(var i=0;i<ds.length;i++)ds[i].open=(m===1);}' +
 		's.thinkingMode=m;' +
+		'}' +
+		// Report current vertical scroll as 0..100 to TC via the host bridge.
+		// rAF-throttle avoids message spam on rapid scrolls.
+		'function reportScroll(){' +
+		'scrollPending=false;' +
+		'var h=document.documentElement.scrollHeight-window.innerHeight;' +
+		'var p=h>0?Math.round(window.scrollY*100/h):0;' +
+		'if(p!==lastPct){lastPct=p;post(''scrollPercent=''+p);}' +
 		'}' +
 		'function init(){' +
 		'var st=document.createElement(''style'');' +
@@ -278,6 +291,9 @@ const
 		'var tb=document.createElement(''button'');tb.textContent=labelFor(s.thinkingMode);' +
 		'tb.onclick=function(){var n=nextMode(s.thinkingMode);apply(n);tb.textContent=labelFor(n);post(''thinkingMode=''+n);};' +
 		'c.appendChild(tb);' +
+		'window.addEventListener(''scroll'',function(){if(!scrollPending){scrollPending=true;requestAnimationFrame(reportScroll);}},{passive:true});' +
+		// Seed TC with 0% after load so stale percentages from previous file are cleared
+		'reportScroll();' +
 		'}' +
 		'if(document.readyState===''loading'')document.addEventListener(''DOMContentLoaded'',init);else init();' +
 		'})();';
@@ -798,10 +814,11 @@ begin
 		LToken: EventRegistrationToken;
 	createdController.add_AcceleratorKeyPressed(TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
 
-	// Receive postMessage calls from the page JS to persist UI state
+	// Receive postMessage calls from the page JS to persist UI state and
+	// relay scroll position to TC for the lister percentage indicator
 	var
 		LMsgToken: EventRegistrationToken;
-	FOwner.FWebView.add_WebMessageReceived(TWebMessageReceivedHandler.Create, LMsgToken);
+	FOwner.FWebView.add_WebMessageReceived(TWebMessageReceivedHandler.Create(FOwner.FPluginWin), LMsgToken);
 
 	// Size the WebView2 to fill the plugin window
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
@@ -871,12 +888,18 @@ end;
 // TWebMessageReceivedHandler
 // ========================================================================
 
+constructor TWebMessageReceivedHandler.Create(APluginWin: HWND);
+begin
+	inherited Create;
+	FPluginWin := APluginWin;
+end;
+
 function TWebMessageReceivedHandler.Invoke(const sender: ICoreWebView2;
 	const args: ICoreWebView2WebMessageReceivedEventArgs): HResult; stdcall;
 var
 	LPtr: PWideChar;
 	LMsg, LKey, LVal: string;
-	LEqPos: Integer;
+	LEqPos, LPct: Integer;
 begin
 	Result := S_OK;
 	if args = nil then
@@ -889,7 +912,7 @@ begin
 		CoTaskMemFree(LPtr);
 	end;
 
-	// Simple key=value protocol avoids pulling in a JSON parser for three tiny messages
+	// Simple key=value protocol avoids pulling in a JSON parser for a few tiny messages
 	LEqPos := Pos('=', LMsg);
 	if LEqPos <= 0 then
 		Exit;
@@ -905,6 +928,23 @@ begin
 	begin
 		GListerConfig.DefaultFullWidth := LVal = '1';
 		SaveListerConfig;
+	end
+	else if LKey = 'scrollPercent' then
+	begin
+		LPct := StrToIntDef(LVal, 0);
+		if LPct < 0 then
+			LPct := 0
+		else if LPct > 100 then
+			LPct := 100;
+		// TC lister percentage convention per WLX SDK (wm_command.htm):
+		//   PostMessage(GetParent(ListWin), WM_COMMAND,
+		//               MAKELONG(percent, itm_percent), LPARAM(ListWin));
+		// wParam low word = percent (0..100); high word = itm_percent ($FFFE).
+		// lParam = the plugin's own HWND (what was returned from ListLoad) --
+		// TC uses it to correlate the report with the reporting plugin instance.
+		if FPluginWin <> 0 then
+			PostMessage(GetParent(FPluginWin), WM_COMMAND,
+				MakeWParam(Word(LPct), itm_percent), LPARAM(FPluginWin));
 	end;
 end;
 
@@ -934,6 +974,12 @@ begin
 
 	LWindow.LoadFile(string(FileToLoad));
 	LWindow.InitWebView2;
+
+	// Claim the percent indicator synchronously so TC knows this is a
+	// percent-capable plugin view before its UI state (including the
+	// click-through dialog type) is finalised. WebView2 init is async,
+	// so the JS-driven scroll report comes too late for this purpose.
+	PostMessage(ParentWin, WM_COMMAND, MakeWParam(0, itm_percent), LPARAM(LPluginWin));
 
 	Result := LPluginWin;
 end;
@@ -1843,6 +1889,21 @@ begin
 		lc_selectall:
 			begin
 				LWindow.FWebView.ExecuteScript('document.execCommand("selectAll")', nil);
+				Result := LISTPLUGIN_OK;
+			end;
+		lc_setpercent:
+			begin
+				// TC's slider sends a target percentage (0..100); scroll the page to that
+				// fraction of its scrollable range. The subsequent scroll event triggers
+				// a scrollPercent echo back to TC, which is idempotent.
+				var LTarget: Integer := Parameter;
+				if LTarget < 0 then
+					LTarget := 0
+				else if LTarget > 100 then
+					LTarget := 100;
+				LWindow.FWebView.ExecuteScript(PWideChar(Format(
+					'(function(){var h=document.documentElement.scrollHeight-window.innerHeight;' +
+					'if(h>0)window.scrollTo(0,Math.round(h*%d/100));})();', [LTarget])), nil);
 				Result := LISTPLUGIN_OK;
 			end;
 		else
