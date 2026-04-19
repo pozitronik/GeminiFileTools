@@ -267,8 +267,14 @@ const
 		'document.head.appendChild(st);' +
 		'apply(s.thinkingMode);' +
 		'var c=document.getElementById(''controls'');if(!c)return;' +
-		'var btns=c.querySelectorAll(''button'');' +
-		'for(var i=0;i<btns.length;i++){var t=(btns[i].textContent||'''').trim();if(t===''Expand thinking''||t===''Collapse thinking'')btns[i].remove();}' +
+		'var btns=c.querySelectorAll(''button'');var wb=null;' +
+		'for(var i=0;i<btns.length;i++){var t=(btns[i].textContent||'''').trim();' +
+		'if(t===''Expand thinking''||t===''Collapse thinking'')btns[i].remove();' +
+		'else if(t===''Full width''||t===''Column width'')wb=btns[i];}' +
+		// The formatter emits width toggle as an inline onclick which updates body class
+		// and button label synchronously. Our listener runs after the inline handler
+		// and observes the final state, so we simply report it back to the host.
+		'if(wb)wb.addEventListener(''click'',function(){post(''fullWidth=''+(document.body.classList.contains(''full-width'')?''1'':''0''));});' +
 		'var tb=document.createElement(''button'');tb.textContent=labelFor(s.thinkingMode);' +
 		'tb.onclick=function(){var n=nextMode(s.thinkingMode);apply(n);tb.textContent=labelFor(n);post(''thinkingMode=''+n);};' +
 		'c.appendChild(tb);' +
@@ -372,6 +378,8 @@ begin
 		try
 			LIni.WriteInteger('HtmlDefaults', 'DefaultExpandThinking',
 				GListerConfig.DefaultExpandThinking);
+			LIni.WriteBool('HtmlDefaults', 'DefaultFullWidth',
+				GListerConfig.DefaultFullWidth);
 		finally
 			LIni.Free;
 		end;
@@ -891,6 +899,11 @@ begin
 	if LKey = 'thinkingMode' then
 	begin
 		GListerConfig.DefaultExpandThinking := StrToIntDef(LVal, THINKING_COLLAPSE);
+		SaveListerConfig;
+	end
+	else if LKey = 'fullWidth' then
+	begin
+		GListerConfig.DefaultFullWidth := LVal = '1';
 		SaveListerConfig;
 	end;
 end;
