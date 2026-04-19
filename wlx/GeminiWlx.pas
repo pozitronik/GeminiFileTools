@@ -26,13 +26,21 @@ uses
 	GeminiFile.Formatter.Html,
 	GeminiPlugin.Shared;
 
+const
+	/// Thinking-block visibility modes stored in DefaultExpandThinking.
+	/// Values 0 and 1 match the legacy boolean semantics for backward compatibility.
+	THINKING_COLLAPSE = 0;
+	THINKING_EXPAND = 1;
+	THINKING_HIDE = 2;
+
 type
 	TListerConfig = record
 		HideEmptyBlocks: Boolean;
 		CombineBlocks: Boolean;
 		RenderMarkdown: Boolean;
 		DefaultFullWidth: Boolean;
-		DefaultExpandThinking: Boolean;
+		/// Thinking visibility: 0=collapse, 1=expand, 2=hide. Persisted across sessions.
+		DefaultExpandThinking: Integer;
 		CollapseSystemInstruction: Boolean;
 		UserDataFolder: string;
 		AllowContextMenu: Boolean;
@@ -104,6 +112,15 @@ type
 	public
 		constructor Create(AParentWin: HWND);
 		function Invoke(const sender: ICoreWebView2Controller; const args: ICoreWebView2AcceleratorKeyPressedEventArgs): HResult; stdcall;
+	end;
+
+	/// <summary>
+	///   Receives string messages posted from page JS via window.chrome.webview.postMessage.
+	///   Used to persist UI state (thinking mode) back to gemini.ini.
+	/// </summary>
+	TWebMessageReceivedHandler = class(TInterfacedObject, ICoreWebView2WebMessageReceivedEventHandler)
+	public
+		function Invoke(const sender: ICoreWebView2; const args: ICoreWebView2WebMessageReceivedEventArgs): HResult; stdcall;
 	end;
 
 	/// <summary>
@@ -214,7 +231,7 @@ const
 	DEF_CombineBlocks = False;
 	DEF_RenderMarkdown = True;
 	DEF_DefaultFullWidth = False;
-	DEF_DefaultExpandThinking = False;
+	DEF_DefaultExpandThinking = THINKING_COLLAPSE;
 	DEF_CollapseSystemInstruction = True;
 	DEF_AllowContextMenu = True;
 	DEF_AllowDevTools = False;
@@ -225,6 +242,39 @@ const
 	THUMB_FALLBACK_STRIPE = 'stripe';
 	THUMB_FALLBACK_TEXT = 'text';
 	THUMB_FALLBACK_METADATA = 'metadata';
+
+	/// <summary>
+	///   WLX-only client-side script appended to generated HTML.
+	///   Replaces the formatter's two static thinking buttons with a single
+	///   cycling button (Collapse -> Hide -> Expand) and posts mode changes
+	///   back to the host via window.chrome.webview.postMessage for persistence.
+	/// </summary>
+	WLX_CONTROL_JS =
+		'(function(){' +
+		'var s=window.__geminiState||{thinkingMode:0};' +
+		'function post(m){try{window.chrome.webview.postMessage(m);}catch(e){}}' +
+		'function labelFor(m){return m===0?''Hide thinking'':m===2?''Expand thinking'':''Collapse thinking'';}' +
+		'function nextMode(m){return m===0?2:m===2?1:0;}' +
+		'function apply(m){' +
+		'var h=(m===2);' +
+		'document.body.classList.toggle(''thinking-hidden'',h);' +
+		'if(!h){var ds=document.querySelectorAll(''details.thinking'');for(var i=0;i<ds.length;i++)ds[i].open=(m===1);}' +
+		's.thinkingMode=m;' +
+		'}' +
+		'function init(){' +
+		'var st=document.createElement(''style'');' +
+		'st.textContent=''body.thinking-hidden details.thinking{display:none;}'';' +
+		'document.head.appendChild(st);' +
+		'apply(s.thinkingMode);' +
+		'var c=document.getElementById(''controls'');if(!c)return;' +
+		'var btns=c.querySelectorAll(''button'');' +
+		'for(var i=0;i<btns.length;i++){var t=(btns[i].textContent||'''').trim();if(t===''Expand thinking''||t===''Collapse thinking'')btns[i].remove();}' +
+		'var tb=document.createElement(''button'');tb.textContent=labelFor(s.thinkingMode);' +
+		'tb.onclick=function(){var n=nextMode(s.thinkingMode);apply(n);tb.textContent=labelFor(n);post(''thinkingMode=''+n);};' +
+		'c.appendChild(tb);' +
+		'}' +
+		'if(document.readyState===''loading'')document.addEventListener(''DOMContentLoaded'',init);else init();' +
+		'})();';
 
 type
 	/// <summary>
@@ -269,10 +319,13 @@ begin
 				GListerConfig.HideEmptyBlocks := LIni.ReadBool('General', 'HideEmptyBlocks', DEF_HideEmptyBlocks);
 				GListerConfig.CombineBlocks := LIni.ReadBool('General', 'CombineBlocks', DEF_CombineBlocks);
 				GListerConfig.RenderMarkdown := LIni.ReadBool('General', 'RenderMarkdown', DEF_RenderMarkdown);
-				ReadHtmlDefaults(LIni, DEF_DefaultFullWidth, DEF_DefaultExpandThinking,
+				ReadHtmlDefaults(LIni, DEF_DefaultFullWidth, DEF_DefaultExpandThinking <> THINKING_COLLAPSE,
 					DEF_RenderMarkdown, DEF_CollapseSystemInstruction, LHtmlDefaults);
 				GListerConfig.DefaultFullWidth := LHtmlDefaults.DefaultFullWidth;
-				GListerConfig.DefaultExpandThinking := LHtmlDefaults.DefaultExpandThinking;
+				// Read DefaultExpandThinking as Integer (0=collapse, 1=expand, 2=hide).
+				// Legacy boolean values 0/1 map cleanly; value 2 adds the "hide" state.
+				GListerConfig.DefaultExpandThinking := LIni.ReadInteger('HtmlDefaults',
+					'DefaultExpandThinking', DEF_DefaultExpandThinking);
 				GListerConfig.CollapseSystemInstruction := LHtmlDefaults.CollapseSystemInstruction;
 				// RenderMarkdown: prefer [General] value if set, fall back to [HtmlDefaults]
 				// (WLX reads RenderMarkdown from General section, not HtmlDefaults)
@@ -295,11 +348,36 @@ var
 	LDefaults: TSharedHtmlDefaults;
 begin
 	LDefaults.DefaultFullWidth := AConfig.DefaultFullWidth;
-	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking;
+	// Formatter renders thinking blocks open only for the "expand" mode.
+	// For "hide" mode, JS overlays display:none regardless of the open attribute.
+	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking = THINKING_EXPAND;
 	LDefaults.RenderMarkdown := AConfig.RenderMarkdown;
 	LDefaults.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
 	Result := BuildHtmlFormatterConfig(AEmbedResources, ASourceFileName, LoadCustomCSS,
 		AConfig.HideEmptyBlocks, AConfig.CombineBlocks, LDefaults);
+end;
+
+/// <summary>
+///   Persists the mutable parts of the lister config back to gemini.ini.
+///   Silently ignores write failures (plugin dir may be read-only).
+/// </summary>
+procedure SaveListerConfig;
+var
+	LIniPath: string;
+	LIni: TIniFile;
+begin
+	LIniPath := TPath.Combine(GetPluginDir, 'gemini.ini');
+	try
+		LIni := TIniFile.Create(LIniPath);
+		try
+			LIni.WriteInteger('HtmlDefaults', 'DefaultExpandThinking',
+				GListerConfig.DefaultExpandThinking);
+		finally
+			LIni.Free;
+		end;
+	except
+		// Ignore: plugin dir may be read-only (e.g., installed to Program Files)
+	end;
 end;
 
 /// <summary>
@@ -484,6 +562,26 @@ begin
 	FTempHtmlPath := '';
 end;
 
+/// <summary>
+///   Appends the WLX-only initial state + controls script to a generated HTML stream.
+///   Emits two script tags: one seeding window.__geminiState with the saved mode,
+///   and one containing the WLX_CONTROL_JS body.
+/// </summary>
+procedure AppendWlxControlScript(AStream: TStream; AThinkingMode: Integer);
+var
+	LPayload: string;
+	LBytes: TBytes;
+begin
+	LPayload :=
+		sLineBreak + '<script>window.__geminiState={thinkingMode:' + IntToStr(AThinkingMode) + '};</script>' +
+		sLineBreak + '<script>' + WLX_CONTROL_JS + '</script>' + sLineBreak;
+	LBytes := TEncoding.UTF8.GetBytes(LPayload);
+	if Length(LBytes) = 0 then
+		Exit;
+	AStream.Seek(0, soEnd);
+	AStream.WriteBuffer(LBytes[0], Length(LBytes));
+end;
+
 function TGeminiListerWindow.GenerateHtml(const AFileName: string): string;
 var
 	LGeminiFile: TGeminiFile;
@@ -518,6 +616,11 @@ begin
 		LStream := TMemoryStream.Create;
 		try
 			LFmt.FormatToStream(LStream, LGeminiFile.Chunks, LGeminiFile.SystemInstruction, LGeminiFile.RunSettings, LResourceInfos);
+
+			// Append WLX-only script carrying saved thinking-mode state and control logic.
+			// Appending after </html> is tolerated by all browsers and keeps the shared
+			// formatter untouched. Avoids the cost of re-reading the stream for a replace.
+			AppendWlxControlScript(LStream, LConfig.DefaultExpandThinking);
 
 			// Write to temp file
 			LTempPath := TPath.Combine(TPath.GetTempPath, 'gemini_wlx_' + TPath.GetGUIDFileName + '.html');
@@ -687,6 +790,11 @@ begin
 		LToken: EventRegistrationToken;
 	createdController.add_AcceleratorKeyPressed(TAcceleratorKeyPressedHandler.Create(FOwner.FParentWin), LToken);
 
+	// Receive postMessage calls from the page JS to persist UI state
+	var
+		LMsgToken: EventRegistrationToken;
+	FOwner.FWebView.add_WebMessageReceived(TWebMessageReceivedHandler.Create, LMsgToken);
+
 	// Size the WebView2 to fill the plugin window
 	GetClientRect(FOwner.FPluginWin, Winapi.Windows.TRect(LRect));
 	createdController.Set_Bounds(LRect);
@@ -749,6 +857,42 @@ begin
 	// entirely and are consumed by WebView2 — this is a WebView2 limitation.
 	args.Set_Handled(1);
 	PostMessage(FParentWin, WM_KEYDOWN, LKey, 0);
+end;
+
+// ========================================================================
+// TWebMessageReceivedHandler
+// ========================================================================
+
+function TWebMessageReceivedHandler.Invoke(const sender: ICoreWebView2;
+	const args: ICoreWebView2WebMessageReceivedEventArgs): HResult; stdcall;
+var
+	LPtr: PWideChar;
+	LMsg, LKey, LVal: string;
+	LEqPos: Integer;
+begin
+	Result := S_OK;
+	if args = nil then
+		Exit;
+	if Failed(args.TryGetWebMessageAsString(LPtr)) or (LPtr = nil) then
+		Exit;
+	try
+		LMsg := string(LPtr);
+	finally
+		CoTaskMemFree(LPtr);
+	end;
+
+	// Simple key=value protocol avoids pulling in a JSON parser for three tiny messages
+	LEqPos := Pos('=', LMsg);
+	if LEqPos <= 0 then
+		Exit;
+	LKey := Copy(LMsg, 1, LEqPos - 1);
+	LVal := Copy(LMsg, LEqPos + 1, MaxInt);
+
+	if LKey = 'thinkingMode' then
+	begin
+		GListerConfig.DefaultExpandThinking := StrToIntDef(LVal, THINKING_COLLAPSE);
+		SaveListerConfig;
+	end;
 end;
 
 // ========================================================================

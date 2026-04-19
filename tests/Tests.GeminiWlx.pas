@@ -141,7 +141,7 @@ type
 		[Test]
 		procedure DefaultFullWidth_IsFalse;
 		[Test]
-		procedure DefaultExpandThinking_IsFalse;
+		procedure DefaultExpandThinking_IsCollapse;
 		[Test]
 		procedure DefaultAllowContextMenu_IsTrue;
 		[Test]
@@ -846,12 +846,12 @@ begin
 	Assert.IsFalse(LConfig.DefaultFullWidth);
 end;
 
-procedure TTestWlxConfig.DefaultExpandThinking_IsFalse;
+procedure TTestWlxConfig.DefaultExpandThinking_IsCollapse;
 var
 	LConfig: TListerConfig;
 begin
 	LConfig := GetListerConfig;
-	Assert.IsFalse(LConfig.DefaultExpandThinking);
+	Assert.AreEqual(THINKING_COLLAPSE, LConfig.DefaultExpandThinking);
 end;
 
 procedure TTestWlxConfig.DefaultAllowContextMenu_IsTrue;
