@@ -215,8 +215,8 @@ The WLX plugin renders Gemini conversation files as formatted HTML directly in T
 
 ### Requirements
 
-- Microsoft Edge WebView2 Runtime (pre-installed on Windows 10/11)
-- `WebView2Loader.dll` — place in a `webview2x64` or `webview2x32` subfolder next to the plugin DLL, or in the plugin directory itself, or rely on the system search path
+- Microsoft Edge WebView2 Runtime (pre-installed on Windows 10/11). Installing the Runtime does **not** provide `WebView2Loader.dll` — that loader is a separate redistributable, bundled with this plugin (see below).
+- `WebView2Loader.dll` — **included in the release package** inside `webview2x32` / `webview2x64` subfolders next to the plugin DLL, so no manual step is required. The plugin looks for it in the architecture-specific subfolder next to the plugin, then in the plugin directory, then on the system DLL search path. When building from source it is deployed automatically from `wlx/redist/` by `wlx_build.bat` (debug) and `release.bat` (packaging).
 
 ### Installation
 
