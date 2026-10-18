@@ -12,12 +12,15 @@ uses
 	System.SysUtils,
 	System.Classes,
 	System.Math,
+	System.Generics.Collections,
 	GeminiFile.Types,
 	GeminiFile.Model,
 	GeminiFile.Grouping,
 	GeminiFile.Formatter.Base;
 
 type
+	TRemoteImageMode = (rimLinks, rimFetch, rimLoad);
+
 	/// <summary>
 	///   Bundles all HTML formatter options into a single value type.
 	///   Plugins build this from INI config; the formatter reads it once at construction.
@@ -26,6 +29,7 @@ type
 	TGeminiHtmlFormatterConfig = record
 		/// <summary>True to embed base64 images as data: URIs; False for external file links.</summary>
 		EmbedResources: Boolean;
+		RemoteImages: TRemoteImageMode;
 		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
 		DefaultFullWidth: Boolean;
 		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
@@ -54,6 +58,8 @@ type
 	TGeminiHtmlFormatter = class(TGeminiFormatterBase)
 	private
 		FEmbedResources: Boolean;
+		FRemoteImages: TRemoteImageMode;
+		FFragmentOnly: Boolean;
 		FDefaultFullWidth: Boolean;
 		FDefaultExpandThinking: Boolean;
 		FCollapseSystemInstruction: Boolean;
@@ -63,7 +69,10 @@ type
 		procedure WriteContentDiv(AOutput: TStream; const AText: string);
 		/// <summary>Writes a thinking details open tag, respecting the expand setting.</summary>
 		procedure WriteThinkingDetailsOpen(AOutput: TStream);
+		procedure WriteRemoteImageScript(AOutput: TStream);
 	protected
+		procedure WritePageStart(AOutput: TStream);
+		function AdditionalStyles: string; virtual;
 		// -- Abstract method overrides (11) -----------------------------------
 		procedure WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string); override;
 		procedure BeginThinkingGroup(AOutput: TStream; ACreateTime: TDateTime; AAnyResource: Boolean); override;
@@ -90,6 +99,11 @@ type
 		/// <param name="AConfig">Configuration record with all formatter options.</param>
 		constructor Create(const AConfig: TGeminiHtmlFormatterConfig); overload;
 		/// <summary>When True, the page starts in full-width mode (no max-width column).</summary>
+		procedure FormatFragmentToStream(AOutput: TStream; AChunks: TObjectList<TGeminiChunk>;
+			const ASystemInstruction: string; ARunSettings: TGeminiRunSettings;
+			const AResources: TArray<TFormatterResourceInfo>);
+		property RemoteImages: TRemoteImageMode read FRemoteImages write FRemoteImages;
+		property EmbedResources: Boolean read FEmbedResources write FEmbedResources;
 		property DefaultFullWidth: Boolean read FDefaultFullWidth write FDefaultFullWidth;
 		/// <summary>When True, thinking blocks start expanded instead of collapsed.</summary>
 		property DefaultExpandThinking: Boolean read FDefaultExpandThinking write FDefaultExpandThinking;
@@ -190,8 +204,19 @@ end;
 	{TGeminiHtmlFormatter}
 
 	/// <summary>Writes an img tag (embedded or external) plus resource-info div.</summary>
-procedure WriteHtmlResource(AOutput: TStream; AEmbedResources: Boolean; const AResInfo: TFormatterResourceInfo);
+procedure WriteHtmlResource(AOutput: TStream; AEmbedResources: Boolean; const AResInfo: TFormatterResourceInfo; ARemoteImages: TRemoteImageMode);
 begin
+	if AResInfo.RemoteUrl <> '' then
+	begin
+		if ARemoteImages = rimLoad then
+			StreamWriteLn(AOutput, '<img class="resource-img" data-remote-url="' + HtmlEscape(AResInfo.RemoteUrl) +
+				'" src="' + HtmlEscape(AResInfo.RemoteUrl) + '" alt="Remote image" onerror="remoteImageError(this)" />')
+		else
+			StreamWriteLn(AOutput, '<a class="remote-image" href="' + HtmlEscape(AResInfo.RemoteUrl) +
+				'" data-remote-url="' + HtmlEscape(AResInfo.RemoteUrl) +
+				'" onclick="loadRemoteImage(this); return false;">Load image: ' + HtmlEscape(AResInfo.RemoteUrl) + '</a>');
+		Exit;
+	end;
 	if AEmbedResources and (AResInfo.Base64Data <> '') then
 	begin
 		StreamWrite(AOutput, '<img class="resource-img" src="data:' + HtmlEscape(AResInfo.MimeType) + ';base64,');
@@ -216,6 +241,7 @@ constructor TGeminiHtmlFormatter.Create(const AConfig: TGeminiHtmlFormatterConfi
 begin
 	inherited Create;
 	FEmbedResources := AConfig.EmbedResources;
+	FRemoteImages := AConfig.RemoteImages;
 	FDefaultFullWidth := AConfig.DefaultFullWidth;
 	FDefaultExpandThinking := AConfig.DefaultExpandThinking;
 	FRenderMarkdown := AConfig.RenderMarkdown;
@@ -224,6 +250,18 @@ begin
 	HideEmptyBlocks := AConfig.HideEmptyBlocks;
 	CombineBlocks := AConfig.CombineBlocks;
 	SourceFileName := AConfig.SourceFileName;
+end;
+
+procedure TGeminiHtmlFormatter.FormatFragmentToStream(AOutput: TStream; AChunks: TObjectList<TGeminiChunk>;
+	const ASystemInstruction: string; ARunSettings: TGeminiRunSettings;
+	const AResources: TArray<TFormatterResourceInfo>);
+begin
+	FFragmentOnly := True;
+	try
+		FormatToStream(AOutput, AChunks, ASystemInstruction, ARunSettings, AResources);
+	finally
+		FFragmentOnly := False;
+	end;
 end;
 
 procedure TGeminiHtmlFormatter.WriteContentDiv(AOutput: TStream; const AText: string);
@@ -242,13 +280,31 @@ begin
 		StreamWriteLn(AOutput, '<details class="thinking">');
 end;
 
-procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
+function TGeminiHtmlFormatter.AdditionalStyles: string;
+begin
+	Result := '';
+end;
+
+procedure TGeminiHtmlFormatter.WriteRemoteImageScript(AOutput: TStream);
+begin
+	StreamWriteLn(AOutput, '<script>');
+	StreamWriteLn(AOutput, 'function remoteImageError(img) {');
+	StreamWriteLn(AOutput, '  var a=document.createElement("a");a.className="remote-image";a.href=img.dataset.remoteUrl;a.dataset.remoteUrl=a.href;');
+	StreamWriteLn(AOutput, '  a.textContent="Image unavailable. Click to retry: "+a.href;a.onclick=function(){loadRemoteImage(a);return false;};img.replaceWith(a);');
+	StreamWriteLn(AOutput, '}');
+	StreamWriteLn(AOutput, 'function loadRemoteImage(a) {');
+	StreamWriteLn(AOutput, '  if(a.dataset.loading)return;a.dataset.loading="1";a.textContent="Loading image: "+a.dataset.remoteUrl;var img=new Image();img.className="resource-img";img.alt="Remote image";img.dataset.remoteUrl=a.dataset.remoteUrl;');
+	StreamWriteLn(AOutput, '  img.onload=function(){a.replaceWith(img);};img.onerror=function(){delete a.dataset.loading;a.textContent="Image unavailable. Click to retry: "+a.dataset.remoteUrl;};');
+	StreamWriteLn(AOutput, '  img.src=a.dataset.remoteUrl;');
+	StreamWriteLn(AOutput, '}');
+	StreamWriteLn(AOutput, 'function fetchRemoteImages(root) { root.querySelectorAll("a.remote-image").forEach(loadRemoteImage); }');
+	StreamWriteLn(AOutput, '</script>');
+end;
+
+procedure TGeminiHtmlFormatter.WritePageStart(AOutput: TStream);
 var
-	LFmt: TFormatSettings;
 	LBodyClasses: string;
 begin
-	LFmt := TFormatSettings.Invariant;
-
 	StreamWriteLn(AOutput, '<!DOCTYPE html>');
 	StreamWriteLn(AOutput, '<html lang="en">');
 	StreamWriteLn(AOutput, '<head>');
@@ -257,9 +313,11 @@ begin
 	StreamWriteLn(AOutput, '<title>' + HtmlEscape(GetDocumentTitle) + '</title>');
 	StreamWriteLn(AOutput, '<style>');
 	StreamWriteLn(AOutput, CSS_STYLES);
+	StreamWriteLn(AOutput, AdditionalStyles);
 	if FCustomCSS <> '' then
 		StreamWriteLn(AOutput, FCustomCSS);
 	StreamWriteLn(AOutput, '</style>');
+	WriteRemoteImageScript(AOutput);
 	StreamWriteLn(AOutput, '</head>');
 
 	// Build body class list from active options
@@ -275,6 +333,15 @@ begin
 		StreamWriteLn(AOutput, '<body>');
 
 	StreamWriteLn(AOutput, '<h1>' + HtmlEscape(GetDocumentTitle) + '</h1>');
+end;
+
+procedure TGeminiHtmlFormatter.WriteDocumentStart(AOutput: TStream; ARunSettings: TGeminiRunSettings; const ASystemInstruction: string);
+var
+	LFmt: TFormatSettings;
+begin
+	LFmt := TFormatSettings.Invariant;
+	if not FFragmentOnly then
+		WritePageStart(AOutput);
 
 	// Metadata
 	StreamWrite(AOutput, '<div class="meta">');
@@ -328,7 +395,7 @@ begin
 	WriteContentDiv(AOutput, AText);
 
 	if AHasResource then
-		WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
+		WriteHtmlResource(AOutput, FEmbedResources, AResInfo, FRemoteImages);
 
 	if LUseCombinedParts then
 		StreamWriteLn(AOutput, '</div>');
@@ -391,7 +458,7 @@ end;
 
 procedure TGeminiHtmlFormatter.WriteContentResource(AOutput: TStream; const AResInfo: TFormatterResourceInfo);
 begin
-	WriteHtmlResource(AOutput, FEmbedResources, AResInfo);
+	WriteHtmlResource(AOutput, FEmbedResources, AResInfo, FRemoteImages);
 end;
 
 procedure TGeminiHtmlFormatter.WriteRemoteHint(AOutput: TStream; ACount: Integer);
@@ -408,6 +475,8 @@ end;
 
 procedure TGeminiHtmlFormatter.WriteDocumentEnd(AOutput: TStream);
 begin
+	if FFragmentOnly then
+		Exit;
 	// Controls panel
 	StreamWriteLn(AOutput, '<div id="controls">');
 	if FDefaultFullWidth then
@@ -425,8 +494,10 @@ begin
 	StreamWriteLn(AOutput, '  btn.textContent = document.body.classList.contains("full-width") ? "Column width" : "Full width";');
 	StreamWriteLn(AOutput, '}');
 	StreamWriteLn(AOutput, 'function setThinking(open) {');
-	StreamWriteLn(AOutput, '  document.querySelectorAll("details.thinking").forEach(function(d) { d.open = open; });');
+	StreamWriteLn(AOutput, '  window.thinkingOpen=open;document.querySelectorAll("details.thinking").forEach(function(d) { d.open = open; });');
 	StreamWriteLn(AOutput, '}');
+	if FRemoteImages = rimFetch then
+		StreamWriteLn(AOutput, 'window.addEventListener("load",function(){setTimeout(function(){fetchRemoteImages(document);},0);});');
 	StreamWriteLn(AOutput, '</script>');
 
 	StreamWriteLn(AOutput, '</body>');

@@ -23,6 +23,8 @@ uses
 	GeminiFile.Parser,
 	GeminiFile.Extractor,
 	GeminiFile,
+	ConversationFile,
+	ConversationFile.Formatter,
 	GeminiFile.Formatter.Intf,
 	GeminiFile.Formatter.Text,
 	GeminiFile.Formatter.Md,
@@ -30,7 +32,7 @@ uses
 	GeminiPlugin.Shared;
 
 type
-	TVirtualFileKind = (vfConversationText, vfConversationMarkdown, vfConversationHtml, vfConversationHtmlEmbedded, vfResourceDir, vfResource);
+	TVirtualFileKind = (vfConversationText, vfConversationMarkdown, vfConversationHtml, vfConversationHtmlEmbedded, vfResourceDir, vfResource, vfCollectionExport, vfCollectionResource);
 
 	TVirtualFileEntry = record
 		Path: string;
@@ -38,6 +40,10 @@ type
 		UnpackedSize: Int64;
 		FileTime: Integer;
 		ResourceIndex: Integer;
+		SessionIndex: Integer;
+		VersionIndex: Integer;
+		ExportFormat: TConversationExportFormat;
+		EmbedResources: Boolean;
 	end;
 
 	/// <summary>
@@ -47,6 +53,7 @@ type
 	TGeminiArchive = class
 	private
 		FGeminiFile: TGeminiFile;
+		FCollection: TConversationFile;
 		FFileName: string;
 		FBaseName: string;
 		FOpenMode: Integer;
@@ -63,6 +70,11 @@ type
 		FProcessDataProc: TProcessDataProcW;
 		FChangeVolProc: TChangeVolProcW;
 		procedure AddVirtualFile(const APath: string; AKind: TVirtualFileKind; ASize: Int64; AResourceIndex: Integer = -1);
+		procedure BuildCollectionVirtualFiles;
+		procedure AddCollectionExport(const APath: string; AFormat: TConversationExportFormat;
+			ASessionIndex: Integer = -1; AVersionIndex: Integer = -1; AEmbedResources: Boolean = False);
+		function FormatCollectionToBytes(AFormat: TConversationExportFormat;
+			ASessionIndex, AVersionIndex: Integer; AEmbedResources: Boolean): TBytes;
 		procedure BuildVirtualFileList;
 		procedure CacheFormattedContent;
 		/// <summary>Formats a conversation using the given formatter and returns the result as bytes.</summary>
@@ -110,6 +122,7 @@ type
 		CombineBlocksMd: Boolean;
 		CombineBlocksHtml: Boolean;
 		CollapseSystemInstruction: Boolean;
+		RemoteImages: TRemoteImageMode;
 	end;
 
 	/// <summary>
@@ -219,6 +232,7 @@ begin
 				GPluginConfig.DefaultExpandThinking := LHtmlDefaults.DefaultExpandThinking;
 				GPluginConfig.RenderMarkdown := LHtmlDefaults.RenderMarkdown;
 				GPluginConfig.CollapseSystemInstruction := LHtmlDefaults.CollapseSystemInstruction;
+				GPluginConfig.RemoteImages := LHtmlDefaults.RemoteImages;
 			finally
 				LIni.Free;
 			end;
@@ -275,6 +289,13 @@ begin
 
 	FFileTime := GetDosFileTime(AFileName);
 
+	if IsClaudeConsoleFile(AFileName) then
+	begin
+		FCollection := TConversationFile.Create;
+		FCollection.LoadFromFile(AFileName);
+		BuildCollectionVirtualFiles;
+		Exit;
+	end;
 	FGeminiFile := TGeminiFile.Create;
 	FGeminiFile.LoadFromFile(AFileName);
 
@@ -288,6 +309,7 @@ destructor TGeminiArchive.Destroy;
 begin
 	FreeAndNil(FVirtualFiles);
 	FreeAndNil(FGeminiFile);
+	FreeAndNil(FCollection);
 	inherited;
 end;
 
@@ -312,6 +334,7 @@ begin
 	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking;
 	LDefaults.RenderMarkdown := AConfig.RenderMarkdown;
 	LDefaults.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	LDefaults.RemoteImages := AConfig.RemoteImages;
 	Result := BuildHtmlFormatterConfig(AEmbedResources, ASourceFileName, ACustomCSS,
 		AConfig.HideEmptyBlocksHtml, AConfig.CombineBlocksHtml, LDefaults);
 end;
@@ -380,6 +403,133 @@ begin
 	LEntry.FileTime := FFileTime;
 	LEntry.ResourceIndex := AResourceIndex;
 	FVirtualFiles.Add(LEntry);
+end;
+
+function TGeminiArchive.FormatCollectionToBytes(AFormat: TConversationExportFormat;
+	ASessionIndex, AVersionIndex: Integer; AEmbedResources: Boolean): TBytes;
+var
+	LFormatter: TConversationFormatter;
+	LStream: TMemoryStream;
+	LConfig: TPluginConfig;
+begin
+	LConfig := GetPluginConfig;
+	LFormatter := TConversationFormatter.Create;
+	try
+		LFormatter.HtmlConfig := BuildWcxHtmlConfig(LConfig, AEmbedResources,
+			TPath.GetFileNameWithoutExtension(FFileName), LoadCustomCSS);
+		LFormatter.HideEmptyBlocksText := LConfig.HideEmptyBlocksText;
+		LFormatter.HideEmptyBlocksMd := LConfig.HideEmptyBlocksMd;
+		LFormatter.CombineBlocksText := LConfig.CombineBlocksText;
+		LFormatter.CombineBlocksMd := LConfig.CombineBlocksMd;
+		LStream := TMemoryStream.Create;
+		try
+			LFormatter.FormatToStream(LStream, FCollection, AFormat, ASessionIndex, AVersionIndex);
+			Result := StreamToBytes(LStream);
+		finally
+			LStream.Free;
+		end;
+	finally
+		LFormatter.Free;
+	end;
+end;
+
+procedure TGeminiArchive.AddCollectionExport(const APath: string; AFormat: TConversationExportFormat;
+	ASessionIndex, AVersionIndex: Integer; AEmbedResources: Boolean);
+var
+	LEntry: TVirtualFileEntry;
+	LData: TBytes;
+begin
+	LData := FormatCollectionToBytes(AFormat, ASessionIndex, AVersionIndex, AEmbedResources);
+	LEntry := Default(TVirtualFileEntry);
+	LEntry.Path := APath;
+	LEntry.Kind := vfCollectionExport;
+	LEntry.UnpackedSize := Length(LData);
+	LEntry.FileTime := FFileTime;
+	LEntry.ExportFormat := AFormat;
+	LEntry.EmbedResources := AEmbedResources;
+	LEntry.SessionIndex := ASessionIndex;
+	LEntry.VersionIndex := AVersionIndex;
+	FVirtualFiles.Add(LEntry);
+end;
+
+procedure TGeminiArchive.BuildCollectionVirtualFiles;
+var
+	I, J, K: Integer;
+	LSession: TConversationSession;
+	LBasePath, LVersionPath: string;
+	LResources: TArray<TGeminiResource>;
+	LInfos: TArray<TFormatterResourceInfo>;
+	LEntry: TVirtualFileEntry;
+	LConfig: TPluginConfig;
+	LAnyResources: Boolean;
+	function SessionHasResources(ASession: TConversationSession): Boolean;
+	var
+		LVersion: TConversationVersion;
+	begin
+		for LVersion in ASession.Versions do
+			if LVersion.Conversation.GetResourceCount > 0 then
+				Exit(True);
+		Result := False;
+	end;
+begin
+	LConfig := GetPluginConfig;
+	if LConfig.EnableText then
+		AddCollectionExport(FBaseName + '.txt', cefText);
+	if LConfig.EnableMarkdown then
+		AddCollectionExport(FBaseName + '.md', cefMarkdown);
+	if LConfig.EnableHtml then
+		AddCollectionExport(FBaseName + '.html', cefHtml);
+	LAnyResources := False;
+	for LSession in FCollection.Sessions do
+		LAnyResources := LAnyResources or SessionHasResources(LSession);
+	if LConfig.EnableHtmlEmbedded and LAnyResources then
+		AddCollectionExport(FBaseName + '_full.html', cefHtml, -1, -1, True);
+	if FCollection.Sessions.Count = 0 then
+		Exit;
+	AddVirtualFile('sessions', vfResourceDir, 0);
+	for I := 0 to FCollection.Sessions.Count - 1 do
+	begin
+		LSession := FCollection.Sessions[I];
+		LBasePath := 'sessions\' + LSession.DirectoryName(I);
+		AddVirtualFile(LBasePath, vfResourceDir, 0);
+		if LConfig.EnableText then
+			AddCollectionExport(LBasePath + '\conversation.txt', cefText, I);
+		if LConfig.EnableMarkdown then
+			AddCollectionExport(LBasePath + '\conversation.md', cefMarkdown, I);
+		if LConfig.EnableHtml then
+			AddCollectionExport(LBasePath + '\conversation.html', cefHtml, I);
+		if LConfig.EnableHtmlEmbedded and SessionHasResources(LSession) then
+			AddCollectionExport(LBasePath + '\conversation_full.html', cefHtml, I, -1, True);
+		AddVirtualFile(LBasePath + '\versions', vfResourceDir, 0);
+		for J := 0 to LSession.Versions.Count - 1 do
+		begin
+			LVersionPath := LBasePath + '\versions\' + Format('%.3d', [J + 1]);
+			AddVirtualFile(LVersionPath, vfResourceDir, 0);
+			if LConfig.EnableText then
+				AddCollectionExport(LVersionPath + '\conversation.txt', cefText, I, J);
+			if LConfig.EnableMarkdown then
+				AddCollectionExport(LVersionPath + '\conversation.md', cefMarkdown, I, J);
+			LResources := LSession.Versions[J].Conversation.GetResources;
+			if Length(LResources) = 0 then
+				Continue;
+			if LConfig.EnableHtmlEmbedded then
+				AddCollectionExport(LVersionPath + '\conversation_full.html', cefHtml, I, J, True);
+			AddVirtualFile(LVersionPath + '\resources', vfResourceDir, 0);
+			LInfos := BuildFormatterResourceInfos(LResources, LSession.Versions[J].Conversation.Chunks);
+			for K := 0 to High(LResources) do
+			begin
+				LEntry := Default(TVirtualFileEntry);
+				LEntry.Path := LVersionPath + '\' + StringReplace(LInfos[K].FileName, '/', '\', [rfReplaceAll]);
+				LEntry.Kind := vfCollectionResource;
+				LEntry.FileTime := FFileTime;
+				LEntry.UnpackedSize := LResources[K].DecodedSize;
+				LEntry.SessionIndex := I;
+				LEntry.VersionIndex := J;
+				LEntry.ResourceIndex := K;
+				FVirtualFiles.Add(LEntry);
+			end;
+		end;
+	end;
 end;
 
 procedure TGeminiArchive.BuildVirtualFileList;
@@ -501,6 +651,19 @@ begin
 		ForceDirectories(LDir);
 
 	case AEntry.Kind of
+		vfCollectionExport:
+			Result := WriteBytesToFile(FormatCollectionToBytes(AEntry.ExportFormat,
+				AEntry.SessionIndex, AEntry.VersionIndex, AEntry.EmbedResources), ADestPath);
+		vfCollectionResource:
+			begin
+				try
+					FCollection.Sessions[AEntry.SessionIndex].Versions[AEntry.VersionIndex].Conversation.GetResources[AEntry.ResourceIndex].SaveToFile(ADestPath);
+					ReportProgress(ADestPath, AEntry.UnpackedSize);
+					Result := 0;
+				except
+					Result := E_EWRITE;
+				end;
+			end;
 		vfConversationText:
 			Result := WriteBytesToFile(FCachedText, ADestPath);
 
@@ -675,6 +838,8 @@ var
 begin
 	Result := False;
 	try
+		if IsClaudeConsoleFile(string(FileName)) then
+			Exit(True);
 		LStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
 		try
 			// Skip UTF-8 BOM if present (EF BB BF)

@@ -153,6 +153,7 @@ type
 		FParts: TObjectList<TGeminiPart>;
 		FInlineImage: TGeminiResource;
 		FDriveImageId: string;
+		FRemoteImageUrl: string;
 		FErrorMessage: string;
 		FSafetyRatings: TArray<TGeminiSafetyRating>;
 		FCreateTime: TDateTime;
@@ -204,6 +205,7 @@ type
 		property InlineImage: TGeminiResource read FInlineImage write FInlineImage;
 		/// <summary>Google Drive image ID reference. Empty if absent.</summary>
 		property DriveImageId: string read FDriveImageId write FDriveImageId;
+		property RemoteImageUrl: string read FRemoteImageUrl write FRemoteImageUrl;
 		/// <summary>Error message from the model. Empty if absent.</summary>
 		property ErrorMessage: string read FErrorMessage write FErrorMessage;
 		/// <summary>Safety ratings for this response.</summary>

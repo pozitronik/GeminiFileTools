@@ -22,6 +22,8 @@ uses
 	GeminiFile.Parser,
 	GeminiFile.Extractor,
 	GeminiFile,
+	ConversationFile,
+	ConversationFile.Formatter,
 	GeminiFile.Formatter.Intf,
 	GeminiFile.Formatter.Html,
 	GeminiPlugin.Shared;
@@ -42,6 +44,7 @@ type
 		/// Thinking visibility: 0=collapse, 1=expand, 2=hide. Persisted across sessions.
 		DefaultExpandThinking: Integer;
 		CollapseSystemInstruction: Boolean;
+		RemoteImages: TRemoteImageMode;
 		UserDataFolder: string;
 		AllowContextMenu: Boolean;
 		AllowDevTools: Boolean;
@@ -279,6 +282,7 @@ const
 		'st.textContent=''body.thinking-hidden details.thinking{display:none;}'';' +
 		'document.head.appendChild(st);' +
 		'apply(s.thinkingMode);' +
+		'document.addEventListener(''conversationchange'',function(){apply(s.thinkingMode);reportScroll();});' +
 		'var c=document.getElementById(''controls'');if(!c)return;' +
 		'var btns=c.querySelectorAll(''button'');var wb=null;' +
 		'for(var i=0;i<btns.length;i++){var t=(btns[i].textContent||'''').trim();' +
@@ -349,6 +353,7 @@ begin
 				GListerConfig.DefaultExpandThinking := LIni.ReadInteger('HtmlDefaults',
 					'DefaultExpandThinking', DEF_DefaultExpandThinking);
 				GListerConfig.CollapseSystemInstruction := LHtmlDefaults.CollapseSystemInstruction;
+				GListerConfig.RemoteImages := LHtmlDefaults.RemoteImages;
 				// RenderMarkdown: prefer [General] value if set, fall back to [HtmlDefaults]
 				// (WLX reads RenderMarkdown from General section, not HtmlDefaults)
 				GListerConfig.UserDataFolder := LIni.ReadString('WebView2', 'UserDataFolder', '');
@@ -375,6 +380,7 @@ begin
 	LDefaults.DefaultExpandThinking := AConfig.DefaultExpandThinking = THINKING_EXPAND;
 	LDefaults.RenderMarkdown := AConfig.RenderMarkdown;
 	LDefaults.CollapseSystemInstruction := AConfig.CollapseSystemInstruction;
+	LDefaults.RemoteImages := AConfig.RemoteImages;
 	Result := BuildHtmlFormatterConfig(AEmbedResources, ASourceFileName, LoadCustomCSS,
 		AConfig.HideEmptyBlocks, AConfig.CombineBlocks, LDefaults);
 end;
@@ -608,54 +614,36 @@ end;
 
 function TGeminiListerWindow.GenerateHtml(const AFileName: string): string;
 var
-	LGeminiFile: TGeminiFile;
-	LResources: TArray<TGeminiResource>;
-	LResourceInfos: TArray<TFormatterResourceInfo>;
-	LFmt: IGeminiFormatter;
+	LFile: TConversationFile;
+	LFormatter: TConversationFormatter;
 	LStream: TMemoryStream;
 	LConfig: TListerConfig;
-	LHtmlConfig: TGeminiHtmlFormatterConfig;
 	LTempPath: string;
-	I: Integer;
 begin
 	Result := '';
 	LConfig := GetListerConfig;
-
-	LGeminiFile := TGeminiFile.Create;
+	LFile := TConversationFile.Create;
 	try
-		LGeminiFile.LoadFromFile(AFileName);
-
-		LResources := LGeminiFile.GetResources;
-		LResourceInfos := BuildFormatterResourceInfos(LResources, LGeminiFile.Chunks);
-
-		// Populate base64 data for embedded mode
-		for I := 0 to High(LResources) do
-			LResourceInfos[I].Base64Data := LResources[I].Base64Data;
-
-		// Generate embedded HTML using shared config builder
-		LHtmlConfig := BuildWlxHtmlConfig(LConfig, True,
-			TPath.GetFileNameWithoutExtension(AFileName));
-		LFmt := TGeminiHtmlFormatter.Create(LHtmlConfig);
-
-		LStream := TMemoryStream.Create;
+		LFile.LoadFromFile(AFileName);
+		LFormatter := TConversationFormatter.Create;
 		try
-			LFmt.FormatToStream(LStream, LGeminiFile.Chunks, LGeminiFile.SystemInstruction, LGeminiFile.RunSettings, LResourceInfos);
-
-			// Append WLX-only script carrying saved thinking-mode state and control logic.
-			// Appending after </html> is tolerated by all browsers and keeps the shared
-			// formatter untouched. Avoids the cost of re-reading the stream for a replace.
-			AppendWlxControlScript(LStream, LConfig.DefaultExpandThinking);
-
-			// Write to temp file
-			LTempPath := TPath.Combine(TPath.GetTempPath, 'gemini_wlx_' + TPath.GetGUIDFileName + '.html');
-			LStream.Position := 0;
-			LStream.SaveToFile(LTempPath);
-			Result := LTempPath;
+			LFormatter.HtmlConfig := BuildWlxHtmlConfig(LConfig, True,
+				TPath.GetFileNameWithoutExtension(AFileName));
+			LStream := TMemoryStream.Create;
+			try
+				LFormatter.FormatToStream(LStream, LFile, cefHtml);
+				AppendWlxControlScript(LStream, LConfig.DefaultExpandThinking);
+				LTempPath := TPath.Combine(TPath.GetTempPath, 'gemini_wlx_' + TPath.GetGUIDFileName + '.html');
+				LStream.SaveToFile(LTempPath);
+				Result := LTempPath;
+			finally
+				LStream.Free;
+			end;
 		finally
-			LStream.Free;
+			LFormatter.Free;
 		end;
 	finally
-		LGeminiFile.Free;
+		LFile.Free;
 	end;
 end;
 
@@ -1861,7 +1849,7 @@ end;
 
 procedure ListGetDetectString(DetectString: PAnsiChar; MaxLen: Integer); stdcall;
 const
-	DETECT = 'FINDI("runSettings") & FINDI("models/")';
+	DETECT = '(FINDI("runSettings") & FINDI("models/")) | FINDI("console-playground-prompts")';
 begin
 	System.AnsiStrings.StrLCopy(DetectString, PAnsiChar(AnsiString(DETECT)), MaxLen - 1);
 end;
