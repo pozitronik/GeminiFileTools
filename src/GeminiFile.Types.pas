@@ -43,6 +43,7 @@ type
 	///   Value record -- decouples formatters from TGeminiResource lifetime.
 	/// </summary>
 	TFormatterResourceInfo = record
+		RemoteUrl: string;
 		/// <summary>Relative path for use in links, e.g. 'resources/resource_001.png'.</summary>
 		FileName: string;
 		/// <summary>MIME type, e.g. 'image/jpeg'.</summary>

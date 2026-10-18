@@ -21,6 +21,7 @@ type
 		DefaultExpandThinking: Boolean;
 		RenderMarkdown: Boolean;
 		CollapseSystemInstruction: Boolean;
+		RemoteImages: TRemoteImageMode;
 	end;
 
 /// <summary>
@@ -106,6 +107,7 @@ begin
 	Result.DefaultExpandThinking := ADefaults.DefaultExpandThinking;
 	Result.RenderMarkdown := ADefaults.RenderMarkdown;
 	Result.CollapseSystemInstruction := ADefaults.CollapseSystemInstruction;
+	Result.RemoteImages := ADefaults.RemoteImages;
 end;
 
 procedure ReadHtmlDefaults(AIni: TIniFile;
@@ -117,6 +119,11 @@ begin
 	ADefaults.DefaultExpandThinking := AIni.ReadBool('HtmlDefaults', 'DefaultExpandThinking', ADefDefaultExpandThinking);
 	ADefaults.RenderMarkdown := AIni.ReadBool('HtmlDefaults', 'RenderMarkdown', ADefRenderMarkdown);
 	ADefaults.CollapseSystemInstruction := AIni.ReadBool('HtmlDefaults', 'CollapseSystemInstruction', ADefCollapseSystemInstruction);
+	ADefaults.RemoteImages := rimLinks;
+	if SameText(AIni.ReadString('HtmlDefaults', 'RemoteImages', 'links'), 'fetch') then
+		ADefaults.RemoteImages := rimFetch
+	else if SameText(AIni.ReadString('HtmlDefaults', 'RemoteImages', 'links'), 'load') then
+		ADefaults.RemoteImages := rimLoad;
 end;
 
 end.

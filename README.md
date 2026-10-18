@@ -1,6 +1,6 @@
 # Gemini File Tools
 
-A set of tools for parsing, viewing, and extracting data from Google Gemini AI Studio conversation files. Written in Delphi (Object Pascal), framework-independent (no VCL/FMX), with zero external dependencies.
+A set of tools for parsing, viewing, and extracting data from Google Gemini AI Studio conversation files and Claude Console session exports. Written in Delphi (Object Pascal), framework-independent (no VCL/FMX), with zero external dependencies.
 
 Three deliverables share the same core library:
 
@@ -20,14 +20,66 @@ Google AI Studio exports conversations as extensionless JSON files. Each file ma
 
 Files can range from a few kilobytes to 500+ MB depending on the number of embedded images.
 
+## Claude Console Exports
+
+Claude Console exports use a JSON object with `kind: "console-playground-prompts"` and schema version `v: 1`. One file contains multiple sessions in `prompts`, each with its own metadata and saved `versions`.
+
+Saved versions are independent snapshots: editing a prompt or regenerating a response can change earlier messages. Keeping them separate preserves that history without duplicating it inside a conversation. The newest snapshot by its saved timestamp is selected initially; ties use the last snapshot in export order. Session and version numbering follow export order.
+
+Text, thinking, system instructions, model settings, HTTPS/HTTP image references, and embedded base64 images are supported. Unfamiliar content blocks remain visible as labeled JSON so their data is not silently lost. Empty thinking blocks with signatures remain in the model and are hidden when empty-block hiding is enabled.
+
+HTML output and the WLX viewer show **one session and one version at a time**. The **Sessions (N)** button opens a side panel containing wrapped session titles and their metadata, with title filtering and an active-session indicator. A version selector exposes each session's history. Switching sessions remembers the selected version, scroll position, and loaded images. The panel sits beside the content in wide windows and overlays it in narrow windows.
+
+Text search operates on the currently displayed snapshot. Use the side panel to select another session or version before searching its content.
+
+### Remote Image Loading
+
+Both plugins read `RemoteImages` from `[HtmlDefaults]` in the `gemini.ini` beside their DLL. The CLI uses `--images` for HTML exports.
+
+| Value | Behavior |
+|-------|----------|
+| `links` (default) | Show clickable URLs. Clicking downloads the image and replaces the link with it. |
+| `fetch` | Display the document first, then load images in the displayed snapshot after page load. |
+| `load` | Start loading images as soon as their snapshot is opened. |
+
+Inactive snapshots do not download remote images. Failed downloads remain retryable. Normal browser caching applies, and loaded image elements stay in memory while switching snapshots. WLX uses its existing WebView2 user-data folder for the browser cache; no separate image-cache directory is required.
+
+```ini
+[HtmlDefaults]
+RemoteImages=links
+```
+
+Embedded images follow the existing external-resource or embedded-HTML setting. Remote images remain URLs even in embedded HTML and use the configured loading mode.
+
 ## GemView — Command-Line Application
 
 ```
+gemview sessions <file>            List sessions and saved versions
 gemview info <file>                Show file metadata and statistics
-gemview conversation <file>        Print the conversation text
+gemview conversation <file>        Print latest conversations as text
+gemview export <file> [options]    Export HTML (default), Markdown, or text
 gemview resources <file>           List embedded resources
 gemview extract <file> [options]   Extract embedded resources
 gemview help                       Show usage information
+```
+
+### Session and Export Options
+
+| Option | Description |
+|--------|-------------|
+| `--session N` | Select one session, numbered from 1. Omit to process all sessions. |
+| `--version N` | Select a saved version, numbered from 1; requires `--session`. Omit to use the latest snapshot. |
+| `--format html\|md\|txt` | Output format for `export` or `conversation`. |
+| `--output <file>` | Write exported content to a file; otherwise write to standard output. |
+| `--images links\|fetch\|load` | Remote image loading for HTML; default `links`. |
+
+HTML retains selectable history, with `--version` choosing the initial snapshot. Text and Markdown contain the selected version, or each session's latest version when no version is selected. `resources` and `extract` also accept session/version selection and process embedded resources; they do not download remote images. Claude extraction uses `sessions/<number - title>/versions/<number>/resources/` beneath the output directory to keep attachments from different snapshots separate.
+
+```text
+gemview sessions playground-prompts.json
+gemview export playground-prompts.json --output sessions.html --images fetch
+gemview conversation playground-prompts.json --session 2 --version 1
+gemview export playground-prompts.json --session 2 --format md --output session.md
 ```
 
 ### Extract Options
@@ -69,6 +121,30 @@ resources\think\
   resource_003.png            Resources from thinking blocks (separated automatically)
   ...
 ```
+
+Claude exports additionally contain session folders and version-specific exports:
+
+```text
+<name>.txt / <name>.md              Latest snapshot of every session
+<name>.html                        Session panel and selectable history
+<name>_full.html                   Embedded HTML, when embedded resources exist
+sessions/
+  001 - <title>/
+    conversation.txt / .md         This session's latest snapshot
+    conversation.html              This session and its selectable history
+    conversation_full.html         Embedded HTML, when resources exist
+    versions/
+      001/
+        conversation.txt / .md     This saved snapshot
+        conversation_full.html     Embedded HTML, when this snapshot has resources
+        resources/                 This snapshot's embedded attachments
+      002/
+        ...
+  002 - <title>/
+    ...
+```
+
+Session folder names have a numeric prefix and a sanitized title, so identical titles remain distinct. Existing format enable/disable settings apply to Claude exports too.
 
 The `<name>` part uses the original Gemini file name by default. This can be changed to a generic `conversation` prefix via configuration.
 
@@ -223,7 +299,7 @@ The WLX plugin renders Gemini conversation files as formatted HTML directly in T
 1. Build the plugin from source or obtain the compiled `gemini.wlx` (32-bit) / `gemini.wlx64` (64-bit)
 2. In Total Commander, go to *Configuration* > *Options* > *Plugins* > *Lister plugins (WLX)*
 3. Click *Add* and select the `.wlx` / `.wlx64` file
-4. The plugin auto-detects Gemini files by looking for `runSettings` and `models/` in the first 8 KB of the file
+4. The plugin auto-detects Gemini files by looking for `runSettings` and `models/`, and Claude exports by looking for `console-playground-prompts`, in the first 8 KB of the file
 
 ### Configuration
 
@@ -274,6 +350,10 @@ When a Gemini file contains embedded images, the first image is decoded and scal
 | `metadata` | Badge showing the model name, chunk count, and token count.                  |
 | `none`     | No thumbnail for imageless files.                                            |
 
+## Browser Regression Checks
+
+After `build.bat`, run `python tests/test_claude_browser.py` on Windows with Microsoft Edge installed. This supplements the DUnitX suite with CLI smoke tests and real browser checks of session/version switching, remote image modes, cross-origin image loading, retry links, and caching while switching. It uses Python's standard library, synthetic sessions, and a local HTTP server; it does not request private example content or external images. Screenshots and generated HTML are saved in a printed temporary directory.
+
 ## Building from Source
 
 ### Requirements
@@ -287,7 +367,10 @@ When a Gemini file contains embedded images, the first image is decoded and scal
 src/                              Core library (framework-independent)
   GeminiFile.Types.pas            Value types, enums, records, helpers
   GeminiFile.Model.pas            Domain model classes
-  GeminiFile.Parser.pas           JSON parser
+  GeminiFile.Parser.pas           Gemini JSON parser
+  ClaudeFile.Parser.pas           Claude snapshot parser
+  ConversationFile.pas            Sessions and independent version snapshots
+  ConversationFile.Formatter.pas  Collection exports and session navigation
   GeminiFile.Extractor.pas        Resource extractor
   GeminiFile.Grouping.pas         Block combining logic
   GeminiFile.Formatter.Text.pas   Plain text formatter

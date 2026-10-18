@@ -29,6 +29,7 @@ type
 		FHideEmptyBlocks: Boolean;
 		FCombineBlocks: Boolean;
 		FSourceFileName: string;
+		FDocumentTitle: string;
 	protected
 		/// <summary>Returns 'Gemini Conversation' with the source filename appended when set.</summary>
 		function GetDocumentTitle: string;
@@ -99,6 +100,7 @@ type
 		property CombineBlocks: Boolean read FCombineBlocks write FCombineBlocks;
 		/// <summary>Source file name shown in the document title for identification.</summary>
 		property SourceFileName: string read FSourceFileName write FSourceFileName;
+		property DocumentTitle: string read FDocumentTitle write FDocumentTitle;
 		/// <summary>
 		///   Template method: iterates chunk groups, delegates format-specific
 		///   output to virtual methods. Do not override in subclasses.
@@ -119,7 +121,9 @@ end;
 
 function TGeminiFormatterBase.GetDocumentTitle: string;
 begin
-	if FSourceFileName <> '' then
+	if FDocumentTitle <> '' then
+		Result := FDocumentTitle
+	else if FSourceFileName <> '' then
 		Result := 'Gemini Conversation - ' + FSourceFileName
 	else
 		Result := 'Gemini Conversation';
@@ -158,6 +162,7 @@ var
 	LFirstContent: Boolean;
 	LSubBlockIndex: Integer;
 	LAnyResource: Boolean;
+	LAnyThinkingText: Boolean;
 	LUseCombinedLayout: Boolean;
 begin
 	LPendingRemoteCount := 0;
@@ -180,6 +185,16 @@ begin
 					LAnyResource := True;
 					Break;
 				end;
+
+			LAnyThinkingText := False;
+			for LChunk in LGroup.Chunks do
+				if (LChunk.Text <> '') or (LChunk.GetThinkingText <> '') then
+				begin
+					LAnyThinkingText := True;
+					Break;
+				end;
+			if FHideEmptyBlocks and not LAnyResource and not LAnyThinkingText then
+				Continue;
 
 			BeginThinkingGroup(AOutput, LGroup.FirstCreateTime, LAnyResource);
 
